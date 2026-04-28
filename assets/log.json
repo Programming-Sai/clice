@@ -1,0 +1,232 @@
+{
+  "challenge_id": "test_01",
+  "started_at": "2026-04-28T17:02:29.924336",
+  "submitted_at": "2026-04-28T17:13:43.033676",
+  "goal_reached": false,
+  "commands": [
+    {
+      "index": 1,
+      "command": "ls",
+      "output": "\"\r\n\u001b[?2004l\rls\r\n\u001b[?2004l\rbin   dev  home  lib32  libx32  mnt  proc  run   srv  tmp  var\r\nboot  etc  lib   lib64  media   opt  root  sbin  sys  usr\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.119
+    },
+    {
+      "index": 2,
+      "command": "pwd",
+      "output": "\u001b[?2004l\r/\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.098
+    },
+    {
+      "index": 3,
+      "command": "cd /usr",
+      "output": "\u001b[?2004l\r\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.057
+    },
+    {
+      "index": 4,
+      "command": "pwd",
+      "output": "\u001b[?2004l\r/usr\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.054
+    },
+    {
+      "index": 5,
+      "command": "ls",
+      "output": "\u001b[?2004l\rbin    include  lib32  libexec  local  share\r\ngames  lib      lib64  libx32   sbin   src\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.1
+    },
+    {
+      "index": 6,
+      "command": "ls /games",
+      "output": "\u001b[?2004l\rls: cannot access '/games': No such file or directory\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.067
+    },
+    {
+      "index": 7,
+      "command": "cat games",
+      "output": "\u001b[?2004l\rcat: games: Is a directory\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.08
+    },
+    {
+      "index": 8,
+      "command": "cd games",
+      "output": "\u001b[?2004l\r\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.055
+    },
+    {
+      "index": 9,
+      "command": "pwd",
+      "output": "\u001b[?2004l\r/usr/games\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.054
+    },
+    {
+      "index": 10,
+      "command": "ls",
+      "output": "\u001b[?2004l\r\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.066
+    },
+    {
+      "index": 11,
+      "command": "ls -a",
+      "output": "\u001b[?2004l\r.  ..\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.067
+    },
+    {
+      "index": 12,
+      "command": "du -sh",
+      "output": "\u001b[?2004l\r4.0K\t.\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.239
+    },
+    {
+      "index": 13,
+      "command": "cd ../..; ls",
+      "output": "\u001b[?2004l\rbin   dev  home  lib32  libx32  mnt  proc  run   srv  tmp  var\r\nboot  etc  lib   lib64  media   opt  root  sbin  sys  usr\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.094
+    },
+    {
+      "index": 14,
+      "command": "cd /usr/games; ls; pwd",
+      "output": "\u001b[?2004l\r/usr/games\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.241
+    },
+    {
+      "index": 15,
+      "command": "ps -aux",
+      "output": "\u001b[?2004l\rUSER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\r\nroot           1  0.3  0.1   4628  3360 pts/0    Ss   17:02   0:00 /bin/bash\r\nroot          18  0.0  0.0   7064  1400 pts/0    R+   17:05   0:00 ps -aux\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.521
+    },
+    {
+      "index": 16,
+      "command": "uname -a",
+      "output": "\u001b[?2004l\rLinux 823c4a320d20 5.15.167.4-microsoft-standard-WSL2 #1 SMP Tue Nov 5 00:21:55 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.084
+    },
+    {
+      "index": 17,
+      "command": "man",
+      "output": "\u001b[?2004l\rThis system has been minimized by removing packages and content that are\r\nnot required on a system that users do not log into.\r\n\r\nTo restore this content, including manpages, you can run the 'unminimize'\r\ncommand. You will still need to ensure the 'man-db' package is installed.\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.092
+    },
+    {
+      "index": 18,
+      "command": "grep",
+      "output": "\u001b[?2004l\rUsage: grep [OPTION]... PATTERNS [FILE]...\r\nTry 'grep --help' for more information.\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.1
+    },
+    {
+      "index": 19,
+      "command": "grep --help",
+      "output": "\u001b[?2004l\rUsage: grep [OPTION]... PATTERNS [FILE]...\r\nSearch for PATTERNS in each FILE.\r\nExample: grep -i 'hello world' menu.h main.c\r\nPATTERNS can contain multiple patterns separated by newlines.\r\n\r\nPattern selection and interpretation:\r\n  -E, --extended-regexp     PATTERNS are extended regular expressions\r\n  -F, --fixed-strings       PATTERNS are strings\r\n  -G, --basic-regexp        PATTERNS are basic regular expressions\r\n  -P, --perl-regexp         PATTERNS are Perl regular expressions\r\n  -e, --regexp=PATTERNS     use PATTERNS for matching\r\n  -f, --file=FILE           take PATTERNS from FILE\r\n  -i, --ignore-case         ignore case distinctions in patterns and data\r\n      --no-ignore-case      do not ignore case distinctions (default)\r\n  -w, --word-regexp         match only whole words\r\n  -x, --line-regexp         match only whole lines\r\n  -z, --null-data           a data line ends in 0 byte, not newline\r\n\r\nMiscellaneous:\r\n  -s, --no-messages         suppress error messages\r\n  -v, --invert-match        select non-matching lines\r\n  -V, --version             display version information and exit\r\n      --help                display this help text and exit\r\n\r\nOutput control:\r\n  -m, --max-count=NUM       stop after NUM selected lines\r\n  -b, --byte-offset         print the byte offset with output lines\r\n  -n, --line-number         print line number with output lines\r\n      --line-buffered       flush output on every line\r\n  -H, --with-filename       print file name with output lines\r\n  -h, --no-filename         suppress the file name prefix on output\r\n      --label=LABEL         use LABEL as the standard input file name prefix\r\n  -o, --only-matching       show only nonempty parts of lines that match\r\n  -q, --quiet, --silent     suppress all normal output\r\n      --binary-files=TYPE   assume that binary files are TYPE;\r\n                            TYPE is 'binary', 'text', or 'without-match'\r\n  -a, --text                equivalent to --binary-files=text\r\n  -I                        equivalent to --binary-files=without-match\r\n  -d, --directories=ACTION  how to handle directories;\r\n                            ACTION is 'read', 'recurse', or 'skip'\r\n  -D, --devices=ACTION      how to handle devices, FIFOs and sockets;\r\n                            ACTION is 'read' or 'skip'\r\n  -r, --recursive           like --directories=recurse\r\n  -R, --dereference-recursive  likewise, but follow all symlinks\r\n      --include=GLOB        search only files that match GLOB (a file pattern)\r\n      --exclude=GLOB        skip files that match GLOB\r\n      --exclude-from=FILE   skip files that match any file pattern from FILE\r\n      --exclude-dir=GLOB    skip directories that match GLOB\r\n  -L, --files-without-match  print only names of FILEs with no selected lines\r\n  -l, --files-with-matches  print only names of FILEs with selected lines\r\n  -c, --count               print only a count of selected lines per FILE\r\n  -T, --initial-tab         make tabs line up (if needed)\r\n  -Z, --null                print 0 byte after FILE name\r\n\r\nContext control:\r\n  -B, --before-context=NUM  print NUM lines of leading context\r\n  -A, --after-context=NUM   print NUM lines of trailing context\r\n  -C, --context=NUM         print NUM lines of output context\r\n  -NUM                      same as --context=NUM\r\n      --group-separator=SEP  print SEP on line between matches with context\r\n      --no-group-separator  do not print separator for matches with context\r\n      --color[=WHEN],\r\n      --colour[=WHEN]       use markers to highlight the matching strings;\r\n                            WHEN is 'always', 'never', or 'auto'\r\n  -U, --binary              do not strip CR characters at EOL (MSDOS/Windows)\r\n\r\nWhen FILE is '-', read standard input.  With no FILE, read '.' if\r\nrecursive, '-' otherwise.  With fewer than two FILEs, assume -h.\r\nExit status is 0 if any line is selected, 1 otherwise;\r\nif any error occurs and -q is not given, the exit status is 2.\r\n\r\nReport bugs to: bug-grep@gnu.org\r\nGNU grep home page: <https://www.gnu.org/software/grep/>\r\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.065
+    },
+    {
+      "index": 20,
+      "command": "pwd",
+      "output": "\u001b[?2004l\r/usr/games\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.058
+    },
+    {
+      "index": 21,
+      "command": "cd ../..; ls; pwd; cd /home; pwd",
+      "output": "\u001b[?2004l\rbin   dev  home  lib32  libx32  mnt  proc  run   srv  tmp  var\r\nboot  etc  lib   lib64  media   opt  root  sbin  sys  usr\r\n/\r\n/home\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.089
+    },
+    {
+      "index": 22,
+      "command": "ls",
+      "output": "\u001b[?2004l\r\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.157
+    },
+    {
+      "index": 23,
+      "command": "ls -al",
+      "output": "\u001b[?2004l\rtotal 8\r\ndrwxr-xr-x 2 root root 4096 Apr 18  2022 .\r\ndrwxr-xr-x 1 root root 4096 Apr 28 17:02 ..\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.088
+    },
+    {
+      "index": 24,
+      "command": "hostname",
+      "output": "\u001b[?2004l\r823c4a320d20\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.086
+    },
+    {
+      "index": 25,
+      "command": "echo \"this is good\"",
+      "output": "\u001b[?2004l\rthis is good\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.113
+    },
+    {
+      "index": 26,
+      "command": "echo \"what changed and it is working fine\"",
+      "output": "\u001b[?2004l\rwhat changed and it is working fine\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.057
+    },
+    {
+      "index": 27,
+      "command": "pwd",
+      "output": "\u001b[?2004l\r/home\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.077
+    },
+    {
+      "index": 28,
+      "command": "sleeo 3",
+      "output": "\u001b[?2004l\rbash: sleeo: command not found\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.078
+    },
+    {
+      "index": 29,
+      "command": "sleep 3",
+      "output": "\u001b[?2004l\r\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 3.098
+    },
+    {
+      "index": 30,
+      "command": "cat /etc/passwd | awk '{print $1}'",
+      "output": "\u001b[?2004l\rroot:x:0:0:root:/root:/bin/bash\r\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin\r\nbin:x:2:2:bin:/bin:/usr/sbin/nologin\r\nsys:x:3:3:sys:/dev:/usr/sbin/nologin\r\nsync:x:4:65534:sync:/bin:/bin/sync\r\ngames:x:5:60:games:/usr/games:/usr/sbin/nologin\r\nman:x:6:12:man:/var/cache/man:/usr/sbin/nologin\r\nlp:x:7:7:lp:/var/spool/lpd:/usr/sbin/nologin\r\nmail:x:8:8:mail:/var/mail:/usr/sbin/nologin\r\nnews:x:9:9:news:/var/spool/news:/usr/sbin/nologin\r\nuucp:x:10:10:uucp:/var/spool/uucp:/usr/sbin/nologin\r\nproxy:x:13:13:proxy:/bin:/usr/sbin/nologin\r\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin\r\nbackup:x:34:34:backup:/var/backups:/usr/sbin/nologin\r\nlist:x:38:38:Mailing\r\nirc:x:39:39:ircd:/run/ircd:/usr/sbin/nologin\r\ngnats:x:41:41:Gnats\r\nnobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\r\n_apt:x:100:65534::/nonexistent:/usr/sbin/nologin\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.202
+    },
+    {
+      "index": 31,
+      "command": "cat /etc/passwd | awk '{print $2}' -F ':'",
+      "output": "\u001b[?2004l\rawk: cannot open -F (No such file or directory)\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.076
+    },
+    {
+      "index": 32,
+      "command": "cat /etc/passwd | awk '{print $2}' -d ':'",
+      "output": "\u001b[?2004l\rawk: cannot open -d (No such file or directory)\r\n\u001b[?2004h",
+      "exit_code": -1,
+      "elapsed_seconds": 0.075
+    }
+  ]
+}
