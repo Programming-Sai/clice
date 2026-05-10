@@ -4,6 +4,11 @@ import time
 import re
 from datetime import datetime
 
+
+def _strip_control_sequences(text: str) -> str:
+    """Remove common ANSI/terminal control sequences from shell output."""
+    return re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
+
 class ShellSession:
     def __init__(self, challenge_id, container_name=None):
         self.challenge_id = challenge_id
@@ -26,6 +31,12 @@ class ShellSession:
         # Set a unique prompt to avoid false matches
         self.child.sendline('PS1="CLICE_PROMPT> "')
         self.child.expect("CLICE_PROMPT> ", timeout=5)
+        self._flush_buffer()
+        # One extra sync cycle to clear any startup residue before the
+        # first user command is captured.
+        self.child.sendline('')
+        self.child.expect("CLICE_PROMPT> ", timeout=2)
+        self._flush_buffer()
         
         return self
     
@@ -77,8 +88,10 @@ class ShellSession:
         # Get raw output (everything before the prompt)
         raw_output = self.child.before.decode()
         
-        # Clean: remove command echo and ANSI codes
-        clean = re.sub(r'\x1b\[[0-9;]*[mK]', '', raw_output)
+        # Clean: remove command echo and terminal control codes
+        clean = _strip_control_sequences(raw_output)
+        if not self.commands:
+            clean = clean.lstrip('\r\n"\' ')
         if clean.startswith(command):
             clean = clean[len(command):].lstrip()
         clean = clean.strip()
@@ -87,9 +100,9 @@ class ShellSession:
         self._flush_buffer()
         self.child.sendline('echo $?')
         self.child.expect("CLICE_PROMPT> ", timeout=5)
-        exit_raw = self.child.before.decode()
-        exit_match = re.search(r'(\d+)\s*$', exit_raw)
-        exit_code = int(exit_match.group(1)) if exit_match else -1
+        exit_raw = _strip_control_sequences(self.child.before.decode())
+        exit_matches = re.findall(r'\b\d+\b', exit_raw)
+        exit_code = int(exit_matches[-1]) if exit_matches else -1
         
         # Log it
         self.commands.append({
