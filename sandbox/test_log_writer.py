@@ -32,4 +32,4 @@ log = session.submit()
 with open("assets/log.json", "w") as f:
     json.dump(log, f, indent=2)
 
-print(f"\n✓ Log saved. Commands: {len(log['commands'])}")
+print(f"\n✓ Log saved. Commands: {len(log['commands'])}") 

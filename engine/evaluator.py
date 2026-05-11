@@ -43,4 +43,4 @@ def evaluate(log_data):
         "time_seconds": compute_time_seconds(log),
         "error_rate": compute_error_rate(log),
         "goal_reached": log.get("goal_reached", False)
-    }
+    } 
