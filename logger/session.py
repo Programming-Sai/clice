@@ -31,7 +31,7 @@ class ShellSession:
         # Set a unique prompt to avoid false matches
         self.child.sendline('PS1="CLICE_PROMPT> "')
         self.child.expect("CLICE_PROMPT> ", timeout=5)
-        self._flush_buffer()
+        self._flush_buffer() 
         # One extra sync cycle to clear any startup residue before the
         # first user command is captured.
         self.child.sendline('')
