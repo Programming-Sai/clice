@@ -1,0 +1,182 @@
+/* ui/screens/home.tcss */
+Screen {
+    background: #0d0d0d;
+    layout: vertical;
+    margin: 0;
+    padding: 0;
+}
+
+/* ── HEADER ── */
+#header {
+    height: 10;
+    layout: horizontal;
+    border-bottom: dashed #1e3a3a;
+    padding: 0 4;
+    align: center middle;
+}
+
+#header-center {
+    width: 1fr;
+    height: 10;
+    layout: vertical;
+    align: center middle;
+}
+
+#logo-area {
+    height: 7;
+    color: #00e5cc;
+    content-align: center middle;
+    width: 100%;
+}
+
+#app-tagline {
+    color: #446666;
+    height: auto;
+    content-align: center middle;
+    width: 100%;
+}
+
+/* ── MAIN CONTENT ── */
+#main-row {
+    height: 1fr;
+    layout: horizontal;
+    margin: 1 2;
+}
+
+#left-col {
+    width: 38%;
+    layout: vertical;
+    margin: 0 1 0 0;
+}
+
+#right-col {
+    width: 1fr;
+    layout: vertical;
+    margin: 0 0 0 1;
+}
+
+/* ── PANELS ── */
+.panel {
+    border: tall #1e3a3a;
+    padding: 1 2;
+    margin-bottom: 1;
+    color: #cccccc;
+}
+
+.panel-title {
+    color: #00e5cc;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+/* ── ABOUT PANEL ── */
+#about-panel {
+    height: auto;
+}
+
+#about-text {
+    color: #888888;
+    height: auto;
+}
+
+/* ── READY PANEL ── */
+#ready-panel {
+    height: 1fr;
+}
+
+.check-row {
+    height: auto;
+    layout: horizontal;
+}
+
+.check-label {
+    width: 1fr;
+    color: #888888;
+    height: auto;
+}
+
+.check-ok {
+    width: auto;
+    color: #00e5cc;
+    text-style: bold;
+}
+
+.check-fail {
+    width: auto;
+    color: #ff4444;
+    text-style: bold;
+}
+
+/* ── ACTIVITY PANEL ── */
+#activity-panel {
+    height: 1fr;
+}
+
+DataTable {
+    background: transparent;
+    color: #aaaaaa;
+    height: 1fr;
+    width: 100%;
+}
+
+DataTable > .datatable--header {
+    background: transparent;
+    color: #555555;
+    text-style: bold;
+}
+
+DataTable > .datatable--odd-row,
+DataTable > .datatable--even-row {
+    background: transparent;
+    height: 2;
+}
+
+DataTable > .datatable--cursor {
+    background: #1a2e2e;
+    color: #00e5cc;
+}
+
+DataTable > .datatable--header-cell {
+    padding: 0 6 0 2;
+}
+
+DataTable > .datatable--cell {
+    padding: 0 6 0 2;
+}
+
+/* ── EMPTY STATE ── */
+#empty-state {
+    height: 1fr;
+    content-align: center middle;
+    color: #2a4a4a;
+    text-style: bold;
+}
+
+/* ── STATUS BAR ── */
+#status-bar {
+    height: 3;
+    layout: horizontal;
+    border-top: dashed #1a1a1a;
+    padding: 0 4;
+    align: left middle;
+}
+
+#status-left {
+    width: 1fr;
+    layout: horizontal;
+    height: 3;
+    align: left middle;
+}
+
+#status-left Static {
+    width: auto;
+    height: 3;
+    content-align: left middle;
+}
+
+#status-right {
+    width: auto;
+    height: 3;
+    content-align: right middle;
+    color: #444444;
+}

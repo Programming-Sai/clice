@@ -1,2 +1,4 @@
 .git
-.clice
+.clice_win
+.clice_lin
+__pycache__

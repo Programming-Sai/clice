@@ -2,11 +2,17 @@
 
 A sandboxed CLI evaluation platform that measures not just what you solved — but how.
 
-for now run with:
+for now run cli with:
 
 ```bash
 docker ps -a | grep clice | awk '{print $1}' | xargs -r docker rm -f && docker volume ls | grep clice-workspace | awk '{print $2}' | xargs -r docker volume rm -f && python clice.py run hello-clice
 ```
 
+and run textual tui with:
+
+```psh
+python -m ui.main
+```
+
 > [!NOTE]
-> Use WSL
+> Use WSL for the cli either wsl or normal windows for the textual app
