@@ -153,6 +153,10 @@ class TerminalInput(TextArea):
         line = self.text.split("\n")[0]
         self.move_cursor((0, len(line)))
 
+    def on_paste(self, event) -> None:
+        """Scroll to bottom after any paste."""
+        self.app.query_one("#terminal-scroll", ScrollableContainer).scroll_end(animate=False)
+
 
 # ─── CSS ──────────────────────────────────────────────────────────────────────
 DEFAULT_CSS = """
