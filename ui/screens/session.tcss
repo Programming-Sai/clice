@@ -1,0 +1,91 @@
+
+Screen {
+    background: #0a0a0a;
+    color: #c8ffc8;
+    layout: vertical;
+}
+
+#main-horizontal {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#terminal-area {
+    width: 1fr;
+    layout: vertical;
+    background: #0a0a0a;
+}
+
+#terminal-scroll {
+    height: 1fr;
+    overflow-y: auto;
+    background: #0d0d0d;
+    padding: 0 2;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #1e3a3a;
+    scrollbar-background: #0d0d0d;
+    scrollbar-color-hover: #2a4a4a;
+    scrollbar-color-active: #00e5cc;
+}
+
+#output-log {
+    height: auto;
+    background: #0d0d0d;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    border: none;
+    padding: 0 1 0 0;
+    color: #cccccc;
+    scrollbar-size-vertical: 1;
+}
+
+#prompt-row {
+    height: auto;
+    layout: horizontal;
+    background: #0d0d0d;
+    padding: 0;
+    layers: above;
+}
+
+#prompt-label {
+    layer: above;
+    offset: 0 0;
+    width: auto;
+    height: 1;
+    color: #00e5cc;
+    text-style: bold;
+    background: #0d0d0d;
+    padding: 0;
+    dock: left;
+}
+
+#sidebar {
+    display: none;
+    background: #0d1a0d;
+    border-left: solid #1e3a3a;
+    padding: 1 2;
+}
+
+#sidebar.visible {
+    display: block;
+    width: 30%;
+}
+
+#sidebar-header {
+    color: #00ffff;
+    text-style: bold;
+    margin-bottom: 1;
+    border-bottom: solid #1e3a3a;
+    padding: 0 0 1 0;
+}
+
+#sidebar-content {
+    height: 1fr;
+    overflow-y: auto;
+    color: #c8ffc8;
+    scrollbar-size-vertical: 1;
+    scrollbar-color: #1e3a3a;
+    scrollbar-background: #0d1a0d;
+    scrollbar-color-hover: #2a4a4a;
+    scrollbar-color-active: #00e5cc;
+}

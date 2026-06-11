@@ -1,7 +1,8 @@
 # ui/main.py
 from pathlib import Path
 from textual.app import App
-from ui.screens import HomeScreen, BrowserScreen   # or from .screens import ...
+from ui.screens import HomeScreen, BrowserScreen
+from ui.screens.session import SessionScreen   # or from .screens import ...
 
 
 class CliceApp(App):
@@ -30,7 +31,7 @@ class CliceApp(App):
     SCREENS = {
         "home": HomeScreen,
         "browser": BrowserScreen,
-        # "session": SessionScreen,
+        "session": SessionScreen,
         # "results": ResultsScreen,
     }
     

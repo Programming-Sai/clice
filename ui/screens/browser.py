@@ -11,8 +11,12 @@ from textual.containers import Horizontal, Vertical
 from textual import on
 from textual.binding import Binding
 from ui.screens.data.challenges import CHALLENGES
+from ui.screens.session import SessionScreen
 from ui.widgets.challenges.challenge_list_item import ChallengeListItem
 from ui.widgets.challenges.detail_panel import DetailPanel
+import re
+
+from ui.widgets.challenges.search_input import SearchInput
 
 
 class BrowserScreen(Screen):
@@ -23,6 +27,7 @@ class BrowserScreen(Screen):
         Binding("down",   "cursor_down", "Navigate down", show=True),
         Binding("slash",  "search",      "Search",        show=True),
         Binding("escape", "app.pop_screen", "Back", show=True),
+        Binding("ctrl+enter", "start_challenge", "Start", show=True),
     ]
 
     _active_item: ChallengeListItem | None = None
@@ -41,8 +46,8 @@ class BrowserScreen(Screen):
 
         with Horizontal(id="search-bar"):
             yield Static("> SEARCH_QUERY:", id="search-prefix")
-            yield Input(
-                placeholder="type to filter by title, id, category or description...",
+            yield SearchInput(
+                placeholder="search... | title:x | cat:file | diff:beginner | /regex/ | title:/regex/",
                 id="search-input",
             )
 
@@ -97,16 +102,68 @@ class BrowserScreen(Screen):
 
     @on(Input.Changed, "#search-input")
     def on_search_changed(self, event: Input.Changed) -> None:
-        query = event.value.strip().lower()
+        query = event.value.strip()
 
-        matching = CHALLENGES if not query else [
-            ch for ch in CHALLENGES
-            if query in " ".join([
-                ch["id"].lower(), ch["title"].lower(),
-                ch["category"].lower(), ch["description"].lower(),
-                ch.get("markdown", "").lower(),
-            ])
-        ]
+        field_map = {
+            "title": "title",
+            "cat":   "category",
+            "id":    "id",
+            "diff":  "difficulty",
+            "desc":  "description",
+        }
+
+        def match_challenge(ch: dict, tokens: list) -> bool:
+            for token in tokens:
+                if ":" in token:
+                    field, _, value = token.partition(":")
+                    key = field_map.get(field.strip().lower())
+                    if not key:
+                        continue
+                    value = value.strip()
+                    # scoped regex: title:/pattern/
+                    if value.startswith("/") and value.endswith("/") and len(value) > 2:
+                        try:
+                            pattern = re.compile(value[1:-1], re.IGNORECASE)
+                            if not pattern.search(ch.get(key, "")):
+                                return False
+                        except re.error:
+                            return False
+                    else:
+                        if value.lower() not in ch.get(key, "").lower():
+                            return False
+                else:
+                    # bare word — must appear somewhere in the challenge
+                    t = token.lower()
+                    haystack = " ".join([
+                        ch["id"].lower(), ch["title"].lower(),
+                        ch["category"].lower(), ch["description"].lower(),
+                        ch.get("markdown", "").lower(),
+                    ])
+                    if t not in haystack:
+                        return False
+            return True
+
+        if not query:
+            matching = CHALLENGES
+
+        elif query.startswith("/") and query.endswith("/") and len(query) > 2:
+            # global regex mode
+            try:
+                pattern = re.compile(query[1:-1], re.IGNORECASE)
+                matching = [
+                    ch for ch in CHALLENGES
+                    if pattern.search(" ".join([
+                        ch["id"], ch["title"], ch["category"],
+                        ch["description"], ch.get("markdown", "")
+                    ]))
+                ]
+            except re.error:
+                matching = []
+
+        else:
+            # tokenize on whitespace — each token is ANDed
+            tokens = query.split()
+            matching = [ch for ch in CHALLENGES if match_challenge(ch, tokens)]
 
         lv = self.query_one("#challenge-list", ListView)
         lv.clear()
@@ -129,3 +186,39 @@ class BrowserScreen(Screen):
     @on(Input.Submitted, "#search-input")
     def on_search_submitted(self, _: Input.Submitted) -> None:
         self.query_one("#challenge-list", ListView).focus()
+    
+    def action_start_challenge(self) -> None:
+        """Start the currently selected challenge."""
+        if not self._active_item:
+            self.app.notify("No challenge selected", title="CLICE")
+            return
+        
+        challenge = self._active_item.challenge
+        
+        # Load the challenge container
+        
+        try:
+            # Push session screen with challenge and container
+            self.app.push_screen(SessionScreen(challenge, True, True))
+        except Exception as e:
+            self.app.notify(f"Failed to start challenge: {e}", title="Error", severity="error")
+
+    def on_key(self, event) -> None:
+        if event.key == "up":
+            event.prevent_default()
+            event.stop()
+            self.action_cursor_up()
+            return
+
+        if event.key == "down":
+            event.prevent_default()
+            event.stop()
+            self.action_cursor_down()
+            return
+
+        if event.key == "alt+x":
+            event.prevent_default()
+            event.stop()
+            self.action_start_challenge()
+            return
+
