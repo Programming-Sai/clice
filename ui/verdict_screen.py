@@ -1,5 +1,5 @@
 """
-pass_screen.py
+verdict_screen.py
 ==============
 Layout priority:
   1. SYSTEM_VERDICT  — the big story (right, 62%, tall hero row)
@@ -37,7 +37,9 @@ from textual.containers import (
     ScrollableContainer, # a box you can scroll inside
 )
 from textual.reactive import reactive          # magic variable → auto-redraws on change
-from rich.text import Text                     # Rich Text = coloured / styled terminal text
+from rich.text import Text
+
+from ui.screens.data.challenges import CHALLENGES                     # Rich Text = coloured / styled terminal text
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -70,6 +72,13 @@ DIM_TEXT   = "#4a8f88"   # dim teal-grey  — labels, secondary info
 # Python ternary syntax:  value_if_true  if  condition  else  value_if_false
 ACCENT = ACCENT_OK if IS_PASSING else ACCENT_ERR
 
+def get_difficulty_color(difficulty):
+    if difficulty == "beginner":
+        return '#00ff88'
+    elif difficulty == "intermediate":
+        return '#ff9900'
+    elif difficulty == "advanced":
+        return '#ff3333'
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  🔤 ASCII ART TITLES
@@ -102,23 +111,7 @@ TITLE_COLOR = ACCENT_OK if IS_PASSING else ACCENT_ERR
 # One dict per challenge. Swap this out (or load from JSON/YAML) to power
 # different challenges without changing any widget code.
 
-CHALLENGE = {
-    "id":         "CH-01",
-    "title":      "FILE_PERMISSIONS",
-    "tags":       ["CHMOD", "CHOWN", "UMASK"],
-    "difficulty": "BEGINNER [#--]",
-    "category":   "FILESYSTEM",
-    "description": (
-        "Master the Unix permission model. Learn how to read, set, and "
-        "audit file permissions using chmod, chown, and umask. Understand "
-        "octal notation and symbolic modes."
-    ),
-    "objectives": [
-        "Set correct permissions on /etc/shadow",
-        "Change ownership of a web root recursively",
-        "Configure umask for a shared group directory",
-    ],
-}
+CHALLENGE = CHALLENGES[0]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -260,7 +253,8 @@ class MetricsPanel(Static):
     # Think of a scoreboard at a basketball game: the number changes live.
     total_commands: reactive[int]   = reactive(42)
     time_elapsed:   reactive[str]   = reactive("00:12:44")
-    error_rate:     reactive[float] = reactive(0.00)
+    correctness:     reactive[float] = reactive(72.00 if IS_PASSING else 0.00)
+    error_rate:     reactive[float] = reactive(0.00 if IS_PASSING else 75.00)
     score:          reactive[str]   = reactive(f"{'98' if IS_PASSING else '12'}/100")
     probability:    reactive[int]   = reactive(98 if IS_PASSING else 12)
 
@@ -284,8 +278,8 @@ class MetricsPanel(Static):
         t.append(c["category"] + "\n", style=TEXT)
 
         t.append(f" {'DIFFICULTY':<12}", style=DIM_TEXT)
-        t.append(c["difficulty"] + "\n", style=ACCENT)
-
+        t.append(c["difficulty"] + "\n", style=get_difficulty_color(c["difficulty"].split(" [")[0].lower()))
+        
         # Tags as little coloured chips  [ CHMOD ] [ CHOWN ] …
         t.append(f" {'TAGS':<12}", style=DIM_TEXT)
         for tag in c["tags"]:
@@ -315,6 +309,7 @@ class MetricsPanel(Static):
         t.append("\n")
         row("TOTAL COMMANDS:", str(self.total_commands))
         row("TIME ELAPSED:",   self.time_elapsed, BRAND)
+        row("CORRECTNESS (%):", f"{self.correctness:.2f}%")
         row("ERROR RATE (%):", f"{self.error_rate:.2f}%")
 
         t.append(" " + "─" * 32 + "\n", style=DIM_BRAND)
@@ -389,7 +384,7 @@ class EOFMarker(Static):
 #  📦 THE APP
 # ══════════════════════════════════════════════════════════════════════════════
 
-class PassScreen(App):
+class VerdictScreen(App):
     """
     The main Textual application — the whole toy box.
 
@@ -467,6 +462,15 @@ class PassScreen(App):
         margin-left: 1;
     }}
 
+    /* Smaller and cyan-themed scrollbars for all containers */
+    #metrics-box, VerdictMarkdown, #timeline-box{{
+        scrollbar-size-vertical: 1;          
+        scrollbar-color: #00e5cc;              
+        scrollbar-background: #0d1a0d;         
+        scrollbar-color-hover: #00ffff;        
+        scrollbar-color-active: #00ff88;       
+    }}
+
     /* ── Markdown styling ────────────────────────────────────────────────────
      *
      * Textual's Markdown widget creates named child widgets we can target:
@@ -517,6 +521,7 @@ class PassScreen(App):
         height: 10;
         border: solid {DIM_BRAND};
         padding: 0 2;
+        padding-top: 1;
         overflow-y: auto;
     }}
 
@@ -579,12 +584,12 @@ class PassScreen(App):
 
                 # LEFT: metrics panel (also contains challenge metadata)
                 with Vertical(id="metrics-box"):
-                    yield SectionHeader("METRICS")
+                    # yield SectionHeader("METRICS")
                     yield MetricsPanel()
 
                 # RIGHT: scrollable markdown verdict
                 with Vertical(id="verdict-box"):
-                    yield SectionHeader("SYSTEM_VERDICT")
+                    # yield SectionHeader("SYSTEM_VERDICT")
                     # Pass the active markdown string in as the first argument.
                     # Textual renders it with full formatting automatically.
                     yield VerdictMarkdown(ACTIVE_VERDICT_MD, id="verdict-md")
@@ -595,7 +600,7 @@ class PassScreen(App):
             # The player can scroll it without it dominating the screen.
 
             with ScrollableContainer(id="timeline-box"):
-                yield SectionHeader("TIMELINE")
+                # yield SectionHeader("TIMELINE")
                 for timestamp, command, exit_code in TIMELINE_ROWS:
                     yield TimelineRow(timestamp, command, exit_code)
                 yield EOFMarker()
@@ -611,6 +616,10 @@ class PassScreen(App):
         """Runs once after compose(). We set the terminal tab title."""
         result_word = "PASS" if IS_PASSING else "FAIL"
         self.title = f"{result_word} — {CHALLENGE['id']} {CHALLENGE['title']}"
+        self.query_one("#metrics-box").border_title = "║ METRICS ║"
+        self.query_one("#verdict-box").border_title = "║ SYSTEM_VERDICT ║"
+        self.query_one("#timeline-box").border_title = "║ TIMELINE ║"
+
 
     def action_return_browser(self) -> None:
         self.notify("Returning to browser...", title="Navigation", timeout=2)
@@ -627,5 +636,5 @@ class PassScreen(App):
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    app = PassScreen()
+    app = VerdictScreen()
     app.run()
