@@ -69,3 +69,5 @@ if __name__ == "__main__":
 # TODO we need to include loading states, for when we actually need laoding
 # TODO we need to have a centralised footer
 # TODO we need to tract activity history and do proper routing for that... so on th ehome page, you view your past activities, and then when you select one, you go to its verdict screen and from there... you can redo it which you can choose to use to overwrite your previous score or to do a new instance of that same problem.
+# TODO the sessino history is not specific to a problem, but more of a global thing. we need to fix that.
+# TODO we need to have a unified design system for the entire app.
