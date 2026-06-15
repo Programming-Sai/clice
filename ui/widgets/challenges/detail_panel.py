@@ -51,6 +51,17 @@ class DetailPanel(ScrollableContainer):
             id="detail-markdown",
         )
 
+        with Vertical(id="empty-state"):
+            yield Static(
+                " _   _  ___    ____  _____ ____  _   _ _   _____ ____\n"
+                "| \\ | |/ _ \\  |  _ \\| ____/ ___|| | | | | |_   _/ ___|\n"
+                "|  \\| | | | | | |_) |  _| \\___ \\| | | | |   | | \\___ \\\n"
+                "| |\\  | |_| | |  _ <| |___ ___) | |_| | |___| |  ___) |\n"
+                "|_| \\_|\\___/  |_| \\_\\_____|____/ \\___/|_____|_| |____/",
+                id="empty-art",
+            )
+            yield Static("", id="empty-msg")
+
     def update_challenge(self, challenge: dict) -> None:
         self.query_one("#session-status", Static).update(
             f"[ ACTIVE_SESSION: {challenge['id']} ]"
@@ -81,3 +92,20 @@ class DetailPanel(ScrollableContainer):
             challenge.get("markdown", "_No description available._")
         )
         self.scroll_home(animate=False)
+
+    def show_empty_state(self, query: str) -> None:
+        for widget_id in ("#session-status", "#detail-title", "#detail-meta", "#objectives-box", "#detail-markdown"):
+            self.query_one(widget_id).display = False
+        for widget in self.query(".section-heading"):
+            widget.display = False
+
+        self.query_one("#empty-msg", Static).update(f'No challenges match "{query}" — try a different keyword.')
+        self.query_one("#empty-state").display = True
+
+    def _restore_all(self) -> None:
+        self.query_one("#empty-state").display = False
+        for widget_id in ("#session-status", "#detail-title", "#detail-meta", "#objectives-box", "#detail-markdown"):
+            self.query_one(widget_id).display = True
+        for widget in self.query(".section-heading"):
+            widget.display = True
+

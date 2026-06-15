@@ -12,6 +12,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widgets import RichLog, Static, Markdown
 from textual.reactive import reactive
+from ui.screens.verdict import VerdictScreen
 from ui.widgets.session.app_footer import AppFooter
 from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_TEXT
 from ui.widgets.session.terminal_input import TerminalInput
@@ -174,8 +175,22 @@ class SessionScreen(Screen):
         self._run_command(command)
 
     def action_submit(self) -> None:
-        inp = self.query_one("#cmd-input", TerminalInput)
-        self._run_command(inp.get_input().strip())
+        """Submit the session and show verdict."""
+        # For demo: randomly decide pass/fail
+        import random
+        goal_reached = random.choice([True, False])
+        
+        # Get the session log
+        log_data = {
+            "challenge_id": self.current_challenge["id"],
+            "started_at": self.session_start_time.isoformat() if self.session_start_time else datetime.now().isoformat(),
+            "submitted_at": datetime.now().isoformat(),
+            "goal_reached": goal_reached,
+            "commands": [{"command": c, "timestamp": "", "exit_code": 0} for c in self.cmd_history]
+        }
+        
+        # Push verdict screen with the session data
+        self.app.push_screen(VerdictScreen(self.current_challenge, log_data))
 
     # ── COMMAND PROCESSOR ─────────────────────────────────────────────────────
 
@@ -190,6 +205,9 @@ class SessionScreen(Screen):
 
         if cmd == "":
             pass
+
+        elif cmd == ":submit":
+            self.action_submit()
 
         elif cmd in ("ls", "ls -la", "ls -l"):
             log.write("[#555555]total 12[/]")

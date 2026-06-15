@@ -2,7 +2,8 @@
 from pathlib import Path
 from textual.app import App
 from ui.screens import HomeScreen, BrowserScreen
-from ui.screens.session import SessionScreen   # or from .screens import ...
+from ui.screens.session import SessionScreen
+from ui.screens.verdict import VerdictScreen   # or from .screens import ...
 
 
 class CliceApp(App):
@@ -32,7 +33,7 @@ class CliceApp(App):
         "home": HomeScreen,
         "browser": BrowserScreen,
         "session": SessionScreen,
-        # "results": ResultsScreen,
+        "verdict": VerdictScreen,
     }
     
     def on_mount(self):
@@ -61,3 +62,10 @@ def run():
 
 if __name__ == "__main__":
     run()
+
+
+
+# TODO we need to make the home screen as responsive as the verdict screen
+# TODO we need to include loading states, for when we actually need laoding
+# TODO we need to have a centralised footer
+# TODO we need to tract activity history and do proper routing for that... so on th ehome page, you view your past activities, and then when you select one, you go to its verdict screen and from there... you can redo it which you can choose to use to overwrite your previous score or to do a new instance of that same problem.

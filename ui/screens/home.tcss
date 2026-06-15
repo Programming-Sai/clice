@@ -47,12 +47,16 @@ Screen {
     width: 38%;
     layout: vertical;
     margin: 0 1 0 0;
+    height: 100%;
+    border: solid transparent;
 }
 
 #right-col {
     width: 1fr;
     layout: vertical;
     margin: 0 0 0 1;
+    height: 100%;
+    border: solid transparent;
 }
 
 /* ── PANELS ── */
@@ -72,6 +76,7 @@ Screen {
 /* ── ABOUT PANEL ── */
 #about-panel {
     height: auto;
+    min-height: 0;
 }
 
 #about-text {

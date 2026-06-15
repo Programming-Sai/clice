@@ -163,6 +163,12 @@ ScrollableContainer {
     margin-bottom: 0;
 }
 
+
+#detail-panel {
+    align: center middle;
+    content-align: center middle;
+}
+
 /* ── Markdown widget ── */
 #detail-markdown {
     color: #c8ffc8;
@@ -195,6 +201,26 @@ ScrollableContainer {
 #detail-markdown MarkdownTableHeader {
     color: #00ffff;
     text-style: bold;
+}
+
+#empty-state {
+    display: none;
+    height: 1fr;
+    align: center middle;
+    content-align: center middle;
+}
+
+#empty-art {
+    color: #00e5cc;
+    content-align: center middle;
+    width: 100%;
+}
+
+#empty-msg {
+    color: #446666;
+    content-align: center middle;
+    width: 100%;
+    margin-top: 1;
 }
 
 /* ── SEARCH BAR ── */

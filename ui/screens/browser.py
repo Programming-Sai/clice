@@ -176,12 +176,12 @@ class BrowserScreen(Screen):
         if matching:
             first = lv.query(".challenge-item").first(ChallengeListItem)
             self._set_active(first)
+            detail._restore_all()              # ← restore hidden widgets first
             detail.update_challenge(matching[0])
+            self._show_results_state()
         else:
-            detail.query_one("#detail-title", Static).update("# NO RESULTS FOUND")
-            detail.query_one("#detail-markdown", Markdown).update(
-                f'_No challenges match "{event.value}". Try a different keyword._'
-            )
+            self._show_empty_state(event.value)
+
 
     @on(Input.Submitted, "#search-input")
     def on_search_submitted(self, _: Input.Submitted) -> None:
@@ -221,4 +221,15 @@ class BrowserScreen(Screen):
             event.stop()
             self.action_start_challenge()
             return
+
+    def _show_empty_state(self, query: str) -> None:
+        """Hide list, show centered no-results message."""
+        self.query_one("#left-panel").display = False
+        detail = self.query_one("#detail-panel", DetailPanel)
+        detail.show_empty_state(query)
+
+    def _show_results_state(self) -> None:
+        """Restore list panel."""
+        self.query_one("#left-panel").display = True
+
 
