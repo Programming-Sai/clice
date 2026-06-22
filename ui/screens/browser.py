@@ -17,6 +17,7 @@ from ui.widgets.challenges.detail_panel import DetailPanel
 import re
 
 from ui.widgets.challenges.search_input import SearchInput
+from ui.widgets.footer import Footer
 
 
 class BrowserScreen(Screen):
@@ -51,17 +52,10 @@ class BrowserScreen(Screen):
                 id="search-input",
             )
 
-        with Horizontal(id="bottom-bar"):
-            yield Static(
-                "[UP/DOWN] NAVIGATE   [ENTER] SELECT   [/] SEARCH   [ESC] BACK",
-                id="bottom-keys",
-            )
-            yield Static(
-                "CONN: OK   MEM: 128MB   MODE: READ_ONLY",
-                id="bottom-sysinfo",
-            )
+        yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one(Footer).set_screen("browser")
         lv = self.query_one("#challenge-list", ListView)
         if CHALLENGES:
             first = lv.query(".challenge-item").first(ChallengeListItem)

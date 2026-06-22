@@ -3,13 +3,14 @@ from pathlib import Path
 from textual.screen import Screen
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
+from ui.widgets.footer import Footer
 
 # Import your widgets
 from ..widgets.home.logo import LogoWidget
 from ..widgets.home.about import AboutPanel
 from ..widgets.home.ready import ReadyPanel
 from ..widgets.home.activity import ActivityPanel
-from ..widgets.status_bar import StatusBar
+# from ..widgets.footer import Footer
 
 class HomeScreen(Screen):
     """Home screen with its own CSS"""
@@ -30,4 +31,7 @@ class HomeScreen(Screen):
             with Vertical(id="right-col"):
                 yield ActivityPanel(classes="panel")
         
-        yield StatusBar()
+        yield Footer()
+        
+    def on_mount(self) -> None:
+        self.query_one(Footer).set_screen("home")

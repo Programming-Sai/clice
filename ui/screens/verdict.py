@@ -15,6 +15,7 @@ from textual.widgets import Static
 
 
 from ui.screens.data.verdicts import VERDICT_MD_FAIL, VERDICT_MD_PASS
+from ui.widgets.footer import Footer
 from ui.widgets.utils.design import (
     BRAND, ACCENT_OK, DIM_BRAND, BG, TEXT
 )
@@ -185,12 +186,10 @@ class VerdictScreen(Screen):
                 yield TimelineBox(self.session_log)
                 # yield EOFMarker()
 
-            yield Static(
-                "[Enter] RETURN TO BROWSER    [H] VIEW HISTORY    [Q] QUIT",
-                id="footer-bar"
-            )
+            yield Footer()
 
     def on_mount(self) -> None:
+        self.query_one(Footer).set_screen("verdict")
         result_word = "PASS" if self.is_passing else "FAIL"
         self.title = f"{result_word} — {self.challenge['id']} {self.challenge['title']}"
         self.query_one("#metrics-box").border_title = "║ METRICS ║"

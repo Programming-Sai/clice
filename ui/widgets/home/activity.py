@@ -2,7 +2,8 @@ from textual.app import ComposeResult
 from textual.widgets import Static, DataTable
 
 
-SHOW_EMPTY_STATE = True
+# SHOW_EMPTY_STATE = True
+SHOW_EMPTY_STATE = False
 
 
 ACTIVITY_DATA = [

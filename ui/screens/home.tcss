@@ -156,32 +156,3 @@ DataTable > .datatable--cell {
     color: #2a4a4a;
     text-style: bold;
 }
-
-/* ── STATUS BAR ── */
-#status-bar {
-    height: 3;
-    layout: horizontal;
-    border-top: dashed #1a1a1a;
-    padding: 0 4;
-    align: left middle;
-}
-
-#status-left {
-    width: 1fr;
-    layout: horizontal;
-    height: 3;
-    align: left middle;
-}
-
-#status-left Static {
-    width: auto;
-    height: 3;
-    content-align: left middle;
-}
-
-#status-right {
-    width: auto;
-    height: 3;
-    content-align: right middle;
-    color: #444444;
-}

@@ -3,7 +3,8 @@ from pathlib import Path
 from textual.app import App
 from ui.screens import HomeScreen, BrowserScreen
 from ui.screens.session import SessionScreen
-from ui.screens.verdict import VerdictScreen   # or from .screens import ...
+from ui.screens.verdict import VerdictScreen
+from ui.widgets.footer import Footer   # or from .screens import ...
 
 
 class CliceApp(App):
@@ -17,6 +18,27 @@ class CliceApp(App):
     * {
         scrollbar-size: 0 0;
     }
+
+    /* Footer should dock at bottom */
+    #footer-container {
+        height: 1;
+        layout: horizontal;
+        margin-top:1;
+    }
+    
+    #footer-left {
+        width: 1fr;
+        height: 1;
+        content-align: left middle;
+    }
+    
+    #footer-right {
+        width: auto;
+        height: 1;
+        content-align: right middle;
+        color: #00e5cc;
+    }
+
     """
     
     BINDINGS = [
@@ -35,6 +57,7 @@ class CliceApp(App):
         "session": SessionScreen,
         "verdict": VerdictScreen,
     }
+
     
     def on_mount(self):
         self.push_screen("home")
@@ -65,7 +88,6 @@ if __name__ == "__main__":
 
 
 
-# TODO we need to make the home screen as responsive as the verdict screen
 # TODO we need to include loading states, for when we actually need laoding
 # TODO we need to have a centralised footer
 # TODO we need to tract activity history and do proper routing for that... so on th ehome page, you view your past activities, and then when you select one, you go to its verdict screen and from there... you can redo it which you can choose to use to overwrite your previous score or to do a new instance of that same problem.
