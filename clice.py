@@ -6,8 +6,10 @@ from loader.registry import ChallengeRegistry
 from loader.challenge_loader import ChallengeLoader
 from logger.session import ShellSession
 from engine.evaluator import evaluate
+from logger.debug import trace
 
 def main():
+    trace("cli_main_begin", argv=sys.argv[1:])
     if len(sys.argv) < 2:
         print("Usage: clice list")
         print("       clice run <challenge-id>")
@@ -24,6 +26,7 @@ def main():
         return
     
     if command == "run":
+        trace("cli_run_begin", challenge_id=sys.argv[2] if len(sys.argv) > 2 else None)
         if len(sys.argv) < 3:
             print("Usage: clice run <challenge-id>")
             sys.exit(1)

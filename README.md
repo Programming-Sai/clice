@@ -15,4 +15,4 @@ python -m ui.main
 ```
 
 > [!NOTE]
-> Use WSL for the cli either wsl or normal windows for the textual app
+> Now you would need to run both the tui and the cli in a linux or with wsl

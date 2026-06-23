@@ -6,6 +6,9 @@ Live terminal session for a challenge.
 
 from pathlib import Path
 from datetime import datetime
+import threading
+from logger.session import ShellSession
+from logger.debug import trace
 from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -14,6 +17,7 @@ from textual.widgets import RichLog, Static, Markdown
 from textual.reactive import reactive
 from ui.screens.verdict import VerdictScreen
 from ui.widgets.footer import Footer
+from ui.widgets.loading_overlay import LoadingOverlay
 from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_TEXT
 from ui.widgets.session.terminal_input import TerminalInput
 
@@ -35,13 +39,21 @@ class SessionScreen(Screen):
         Binding("escape", "app.pop_screen", "BACK", show=True),
     ]
 
-    def __init__(self, challenge: dict, sidebar_visible: bool, timer_visible: bool, **kwargs):
+    def __init__(self, challenge: dict, sidebar_visible: bool, timer_visible: bool, container=None, container_name=None, **kwargs):
         super().__init__(**kwargs)
         self.current_challenge = challenge
         self.sidebar_visible = sidebar_visible
-        self.timer_visible = timer_visible  # initial state
+        self.timer_visible = timer_visible
         self._timer_interval = None
         self.session_start_time = None
+        self.container = container
+        if container and hasattr(container, 'name'):
+            self.container_name = container.name
+        else:
+            self.container_name = None
+        self.shell_session = None
+        self.loading_overlay = None
+        trace("screen_init", challenge_id=challenge.get("id"), container_name=getattr(container, "name", None))
 
     # ── LAYOUT ────────────────────────────────────────────────────────────────
 
@@ -57,7 +69,11 @@ class SessionScreen(Screen):
             with Vertical(id="sidebar"):
                 yield Static("", id="sidebar-header")
                 yield Markdown("", id="sidebar-content")
+
         yield Footer()
+        
+        self.loading_overlay = LoadingOverlay()
+        yield self.loading_overlay
 
     def on_resize(self, event) -> None:
         log = self.query_one("#output-log", RichLog)
@@ -70,6 +86,7 @@ class SessionScreen(Screen):
         label.styles.width = PROMPT_LEN
 
     def on_mount(self) -> None:
+        trace("screen_on_mount", challenge_id=self.current_challenge.get("id"), container_name=self.container_name)
         # ── Set footer context ────────────────────────────────────────────────
         self.query_one(Footer).set_screen("session")
 
@@ -83,9 +100,7 @@ class SessionScreen(Screen):
 
         # ── Focus input ────────────────────────────────────────────────────────
         self.query_one("#cmd-input", TerminalInput).focus()
-
-        # ── Welcome message ────────────────────────────────────────────────────
-        self.call_after_refresh(self._write_welcome)
+        self.query_one("#cmd-input", TerminalInput).disabled = True
 
         # ── Session start time ────────────────────────────────────────────────
         self.session_start_time = datetime.now()
@@ -100,6 +115,9 @@ class SessionScreen(Screen):
             self._start_timer()
         else:
             self.query_one(Footer).set_right_content("")
+        
+        # ── Start shell session ────────────────────────────────────────────────
+        self._start_shell_session()
 
     def _write_welcome(self) -> None:
         log = self.query_one("#output-log", RichLog)
@@ -149,20 +167,22 @@ class SessionScreen(Screen):
     def action_history_up(self) -> None:
         inp = self.query_one("#cmd-input", TerminalInput)
         scroller = self.query_one("#terminal-scroll", ScrollableContainer)
-        if self.history_index < len(self.cmd_history) - 1:
+        history = self.shell_session.commands if self.shell_session else []
+        if self.history_index < len(history) - 1:
             self.history_index += 1
-            cmd = self.cmd_history[len(self.cmd_history) - 1 - self.history_index]
-            inp.load_history(cmd)
+            history_item = history[len(history) - 1 - self.history_index]
+            inp.load_history(history_item["command"])
         scroller.scroll_end(animate=False)
 
     def action_history_down(self) -> None:
         inp = self.query_one("#cmd-input", TerminalInput)
         scroller = self.query_one("#terminal-scroll", ScrollableContainer)
+        history = self.shell_session.commands if self.shell_session else []
         if self.history_index > -1:
             self.history_index -= 1
             if self.history_index >= 0:
-                cmd = self.cmd_history[len(self.cmd_history) - 1 - self.history_index]
-                inp.load_history(cmd)
+                history_item = history[len(history) - 1 - self.history_index]
+                inp.load_history(history_item["command"])
             else:
                 inp._reset()
         scroller.scroll_end(animate=False)
@@ -174,34 +194,40 @@ class SessionScreen(Screen):
 
     def action_submit(self) -> None:
         """Submit the session and show verdict."""
-        import random
-        goal_reached = random.choice([True, False])
+        if self.shell_session:
+            log_data = self.shell_session.submit()
+        else:
+            # Old fallback kept for easy rollback while the shell integration is stabilized.
+            # import random
+            # goal_reached = random.choice([True, False])
+            # log_data = {
+            #     "challenge_id": self.current_challenge["id"],
+            #     "started_at": self.session_start_time.isoformat() if self.session_start_time else datetime.now().isoformat(),
+            #     "submitted_at": datetime.now().isoformat(),
+            #     "goal_reached": goal_reached,
+            #     "commands": [{"command": c, "timestamp": "", "exit_code": 0} for c in self.cmd_history]
+            # }
+            log_data = {
+                "challenge_id": self.current_challenge["id"],
+                "started_at": self.session_start_time.isoformat() if self.session_start_time else datetime.now().isoformat(),
+                "submitted_at": datetime.now().isoformat(),
+                "goal_reached": False,
+                "commands": [],
+            }
 
-        log_data = {
-            "challenge_id": self.current_challenge["id"],
-            "started_at": self.session_start_time.isoformat() if self.session_start_time else datetime.now().isoformat(),
-            "submitted_at": datetime.now().isoformat(),
-            "goal_reached": goal_reached,
-            "commands": [{"command": c, "timestamp": "", "exit_code": 0} for c in self.cmd_history]
-        }
-
-        # Stop timer before pushing verdict
         self._stop_timer()
         self.query_one(Footer).set_right_content("")
-
         self.app.push_screen(VerdictScreen(self.current_challenge, log_data))
 
     # ── TIMER ──────────────────────────────────────────────────────────────────
 
     def _start_timer(self) -> None:
-        """Start the timer update interval."""
         if not self._timer_interval:
             self._timer_interval = self.set_interval(1, self._update_footer_timer)
-            self._update_footer_timer()  # show immediately
+            self._update_footer_timer()
             self.timer_visible = True
 
     def _stop_timer(self, update_footer: bool = True) -> None:
-        """Stop the timer update interval."""
         if self._timer_interval:
             self._timer_interval.stop()
             self._timer_interval = None
@@ -209,11 +235,10 @@ class SessionScreen(Screen):
             try:
                 self.query_one(Footer).set_right_content("")
             except:
-                pass  # Footer may already be gone
+                pass
         self.timer_visible = False
 
     def _update_footer_timer(self) -> None:
-        """Update the timer in the global footer."""
         if not self.timer_visible or not self.session_start_time:
             return
 
@@ -226,11 +251,55 @@ class SessionScreen(Screen):
         self.query_one(Footer).set_right_content(f"TIMER: {time_str}")
 
     def action_toggle_timer(self) -> None:
-        """Toggle timer display on/off."""
         if self.timer_visible:
             self._stop_timer()
         else:
             self._start_timer()
+
+    # ── SHELL SESSION ─────────────────────────────────────────────────────────
+
+    def _start_shell_session(self) -> None:
+        """Start the shell session with a loading overlay."""
+        trace("screen_start_shell_begin", challenge_id=self.current_challenge.get("id"), container_name=self.container_name)
+        self.loading_overlay.show("Starting shell session...")
+
+        def load():
+            try:
+                trace("screen_shell_thread_begin", challenge_id=self.current_challenge.get("id"), container_name=self.container_name)
+                # Run the shell session in this background thread so the UI stays responsive.
+                shell = ShellSession(
+                    challenge_id=self.current_challenge["id"],
+                    container_name=self.container_name
+                )
+                trace("screen_shell_ipc_created")
+                shell.start()
+                trace("screen_shell_ipc_started")
+                self.shell_session = shell
+                self.app.call_from_thread(self._on_shell_ready)
+            except Exception as e:
+                trace("screen_shell_thread_error", error=repr(e))
+                self.app.call_from_thread(self._on_shell_error, e)
+
+        threading.Thread(target=load, daemon=True).start()
+        trace("screen_shell_thread_spawned")
+
+    def _on_shell_ready(self) -> None:
+        trace("screen_shell_ready_ui")
+        self.loading_overlay.hide()
+        cmd_input = self.query_one("#cmd-input", TerminalInput)
+        cmd_input.disabled = False
+        self.session_start_time = datetime.now()
+        self._write_welcome()
+        cmd_input.focus()
+        self._start_timer()
+
+    def _on_shell_error(self, error: Exception) -> None:
+        trace("screen_shell_error_ui", error=repr(error))
+        self.loading_overlay.hide()
+        self.notify(f"Failed to start shell: {error}", title="Error", severity="error")
+        # input stays disabled — shell_session is still None, so _run_command's
+        # existing "Shell not initialized" fallback won't silently swap to demo mode
+        # unexpectedly; consider adding a retry binding here later.
 
     # ── COMMAND PROCESSOR ─────────────────────────────────────────────────────
 
@@ -239,17 +308,67 @@ class SessionScreen(Screen):
         inp = self.query_one("#cmd-input", TerminalInput)
         scroller = self.query_one("#terminal-scroll", ScrollableContainer)
 
-        log.write(f"[bold #00e5cc]{PROMPT_TEXT}[/][#f0fafa]{command}[/]")
-
         cmd = command.strip()
 
-        if cmd == "":
-            pass
-
-        elif cmd == ":submit":
+        # Internal commands (not sent to shell)
+        # if cmd == "":
+        #     return
+        if cmd == ":submit":
+        # elif cmd == ":submit":
             self.action_submit()
+            return
+        elif cmd in ("exit", "quit"):
+            self.exit()
+            return
+        elif cmd in ("clear", "cls"):
+            log.clear()
+            inp._reset()
+            scroller.scroll_end(animate=False)
+            return
 
-        elif cmd in ("ls", "ls -la", "ls -l"):
+        # ── REAL SHELL EXECUTION ────────────────────────────────────────────────
+        if self.shell_session:
+            try:
+                # Write the command to the log
+                log.write(f"[bold #00e5cc]{PROMPT_TEXT}[/][#f0fafa]{command}[/]")
+                
+                # Execute via shell
+                output, exit_code, elapsed = self.shell_session.execute(cmd)
+                
+                # Display output
+                if output:
+                    log.write(output)
+                
+                # # Show exit code and timing
+                # if exit_code == 0x:
+                #     log.write(f"✓ [{elapsed:.2f}s]")
+                # else:
+                #     log.write(f"✗ [{elapsed:.2f}s] (exit: {exit_code})")
+                
+                # Store command in history
+                self.cmd_history.append({
+                    "command": cmd,
+                    "output": output,
+                    "exit_code": exit_code,
+                    "elapsed": elapsed,
+                    "timestamp": datetime.now().isoformat(),
+                })
+                self.history_index = -1
+            except Exception as e:
+                log.write(f"[#ff4444]Error: {e}[/]")
+        else:
+            # Fallback: demo mode (if shell isn't initialized)
+            log.write(f"[#ff4444]Shell not initialized. Running in demo mode.[/]")
+            self._demo_execute(cmd, log)
+
+        inp._reset()
+        scroller.scroll_end(animate=False)
+
+
+    def _demo_execute(self, cmd: str, log) -> None:
+        """Fallback demo commands when shell is not initialized."""
+
+        if cmd in ("ls", "ls -la", "ls -l", "ls -a"):
             log.write("[#555555]total 12[/]")
             log.write("[#aaaaaa]drwxr-xr-x 3 user user 4096 Oct 24 14:19 [#c8ffc8].[/][/]")
             log.write("[#aaaaaa]drwxr-xr-x 3 root root 4096 Oct 24 14:18 [#c8ffc8]..[/][/]")
@@ -263,11 +382,6 @@ class SessionScreen(Screen):
         elif cmd.startswith("echo "):
             log.write(cmd[5:])
 
-        elif cmd in ("clear", "cls"):
-            log.clear()
-
-        elif cmd in ("exit", "quit"):
-            self.exit()
 
         elif cmd == "help":
             log.write("[#00ffff]Available demo commands:[/]")
@@ -282,11 +396,6 @@ class SessionScreen(Screen):
                 f"  [#555555](try 'help')[/]"
             )
 
-        if cmd != "":
-            self.cmd_history.append(cmd)
-        self.history_index = -1
-        inp._reset()
-        scroller.scroll_end(animate=False)
 
     # ── ACTIONS ───────────────────────────────────────────────────────────────
 

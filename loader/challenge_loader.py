@@ -31,6 +31,14 @@ class ChallengeLoader:
         self.docker.volumes.create(name=volume_name)
         self.volume_name = volume_name
         
+        container_name = f"clice-{challenge_info['id']}"
+        try:
+            existing = self.docker.containers.get(container_name)
+            existing.remove(force=True)
+            print(f"Removed existing container: {container_name}")
+        except docker.errors.NotFound:
+            pass
+        
         # 4. Start user container
         container = self.docker.containers.run(
             challenge_info["image"],
@@ -39,7 +47,7 @@ class ChallengeLoader:
             stdin_open=True,
             tty=True,
             volumes={volume_name: {"bind": "/workspace", "mode": "rw"}},
-            name=f"clice-{challenge_info['id']}"
+            name=container_name
         )
         
         # Verify container is running
@@ -53,7 +61,7 @@ class ChallengeLoader:
     
     def _build_checker_image(self, challenge_info):
         """Build isolated checker image for this challenge (cached)"""
-        challenge_id = challenge_info["id"]
+        challenge_id = challenge_info["id"].lower()
         check_url = challenge_info["check_url"]
         image_tag = f"clice-checker-{challenge_id}:latest"
         
@@ -68,7 +76,7 @@ class ChallengeLoader:
         
         # Download check.py
         print(f"Downloading check script for {challenge_id}...")
-        response = requests.get(check_url)
+        response = requests.get(check_url, timeout=15)
         response.raise_for_status()
         check_script = response.text
         

@@ -5,6 +5,7 @@ from ui.screens import HomeScreen, BrowserScreen
 from ui.screens.session import SessionScreen
 from ui.screens.verdict import VerdictScreen
 from ui.widgets.footer import Footer   # or from .screens import ...
+from logger.debug import trace
 
 
 class CliceApp(App):
@@ -60,6 +61,7 @@ class CliceApp(App):
 
     
     def on_mount(self):
+        trace("app_on_mount")
         self.push_screen("home")
     
     def action_new_session(self) -> None:
@@ -80,6 +82,7 @@ class CliceApp(App):
         self.notify("⚙️  SETTINGS — not yet implemented!", title="CLICE")
 
 def run():
+    trace("app_run")
     app = CliceApp()
     app.run()
 

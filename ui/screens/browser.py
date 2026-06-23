@@ -10,6 +10,7 @@ from textual.widgets import Static, ListView, Input, Markdown
 from textual.containers import Horizontal, Vertical
 from textual import on
 from textual.binding import Binding
+import threading
 from ui.screens.data.challenges import CHALLENGES
 from ui.screens.session import SessionScreen
 from ui.widgets.challenges.challenge_list_item import ChallengeListItem
@@ -18,6 +19,10 @@ import re
 
 from ui.widgets.challenges.search_input import SearchInput
 from ui.widgets.footer import Footer
+from ui.widgets.loading_overlay import LoadingOverlay
+from loader.challenge_loader import ChallengeLoader
+from logger.debug import trace
+
 
 
 class BrowserScreen(Screen):
@@ -32,6 +37,7 @@ class BrowserScreen(Screen):
     ]
 
     _active_item: ChallengeListItem | None = None
+    _starting_challenge: bool = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main-area"):
@@ -53,6 +59,7 @@ class BrowserScreen(Screen):
             )
 
         yield Footer()
+        yield LoadingOverlay("Preparing challenge...")
 
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("browser")
@@ -183,19 +190,60 @@ class BrowserScreen(Screen):
     
     def action_start_challenge(self) -> None:
         """Start the currently selected challenge."""
+        trace("browser_start_challenge_begin")
+        if self._starting_challenge:
+            return
         if not self._active_item:
             self.app.notify("No challenge selected", title="CLICE")
             return
         
-        challenge = self._active_item.challenge
-        
-        # Load the challenge container
-        
-        try:
-            # Push session screen with challenge and container
-            self.app.push_screen(SessionScreen(challenge, True, True))
-        except Exception as e:
-            self.app.notify(f"Failed to start challenge: {e}", title="Error", severity="error")
+        challenge = self._active_item.challenge.copy()
+        challenge["image"] = "ghcr.io/programming-sai/clice/challenges/hello-clice:latest"
+        challenge["check_url"] = "https://raw.githubusercontent.com/Programming-Sai/clice-challenges/main/hello-clice/check.py"
+        self._starting_challenge = True
+        loading = self.query_one(LoadingOverlay)
+        loading.show("Preparing challenge...")
+
+        def load() -> None:
+            loader = None
+            container = None
+            try:
+                trace("browser_loader_thread_begin", challenge_id=challenge["id"])
+                loader = ChallengeLoader()
+                container = loader.load_challenge(challenge)
+
+                container.reload()
+                if container.status != "running":
+                    raise RuntimeError(f"Container not running: {container.status}")
+
+                trace("browser_container_ready", container_name=container.name, container_id=container.id)
+
+                def open_session() -> None:
+                    try:
+                        self.app.push_screen(SessionScreen(challenge, True, True, container))
+                        trace("browser_session_screen_pushed")
+                    finally:
+                        loading.hide()
+                        self._starting_challenge = False
+
+                self.app.call_from_thread(open_session)
+            except Exception as e:
+                trace("browser_start_challenge_error", error=repr(e))
+                error_text = str(e)
+
+                def show_error() -> None:
+                    loading.hide()
+                    self._starting_challenge = False
+                    self.app.notify(f"Failed to start challenge: {error_text}", title="Error", severity="error")
+
+                self.app.call_from_thread(show_error)
+                if loader and container:
+                    try:
+                        loader.cleanup(container)
+                    except Exception:
+                        pass
+
+        threading.Thread(target=load, daemon=True).start()
 
     def on_key(self, event) -> None:
         if event.key == "up":
