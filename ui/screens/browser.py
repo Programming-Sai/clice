@@ -11,7 +11,8 @@ from textual.containers import Horizontal, Vertical
 from textual import on
 from textual.binding import Binding
 import threading
-from ui.screens.data.challenges import CHALLENGES
+from ui.services.registry import RegistryService
+from ui.services.config import Config
 from ui.screens.session import SessionScreen
 from ui.widgets.challenges.challenge_list_item import ChallengeListItem
 from ui.widgets.challenges.detail_panel import DetailPanel
@@ -36,15 +37,18 @@ class BrowserScreen(Screen):
         Binding("ctrl+enter", "start_challenge", "Start", show=True),
     ]
 
-    _active_item: ChallengeListItem | None = None
-    _starting_challenge: bool = False
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.challenges = []  
+        self._active_item: ChallengeListItem | None = None
+        self._starting_challenge: bool = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main-area"):
             with Vertical(id="left-panel"):
                 yield Static("CHALLENGE_INDEX", id="left-panel-label")
                 with ListView(id="challenge-list"):
-                    for ch in CHALLENGES:
+                    for ch in self.challenges:
                         yield ChallengeListItem(ch)
 
             with Vertical(id="right-panel"):
@@ -63,12 +67,21 @@ class BrowserScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("browser")
+        
+        # Load challenges from registry
+        config = Config()
+        registry = RegistryService(config)
+        self.challenges = registry.get_challenges()
+        
         lv = self.query_one("#challenge-list", ListView)
-        if CHALLENGES:
+        for ch in self.challenges:
+            lv.append(ChallengeListItem(ch))
+        
+        if self.challenges:
             first = lv.query(".challenge-item").first(ChallengeListItem)
             self._set_active(first)
-            self.query_one("#detail-panel", DetailPanel).update_challenge(CHALLENGES[0])
-        # Focus search on mount as requested
+            self.query_one("#detail-panel", DetailPanel).update_challenge(self.challenges[0])
+        
         self.query_one("#search-input", Input).focus()
 
     def _set_active(self, item: ChallengeListItem | None) -> None:
@@ -136,7 +149,7 @@ class BrowserScreen(Screen):
                     # bare word — must appear somewhere in the challenge
                     t = token.lower()
                     haystack = " ".join([
-                        ch["id"].lower(), ch["title"].lower(),
+                        ch["id"].lower()[:5], ch["title"].lower(),
                         ch["category"].lower(), ch["description"].lower(),
                         ch.get("markdown", "").lower(),
                     ])
@@ -145,16 +158,16 @@ class BrowserScreen(Screen):
             return True
 
         if not query:
-            matching = CHALLENGES
+            matching = self.challenges
 
         elif query.startswith("/") and query.endswith("/") and len(query) > 2:
             # global regex mode
             try:
                 pattern = re.compile(query[1:-1], re.IGNORECASE)
                 matching = [
-                    ch for ch in CHALLENGES
+                    ch for ch in self.challenges
                     if pattern.search(" ".join([
-                        ch["id"], ch["title"], ch["category"],
+                        ch["id"][:5], ch["title"], ch["category"],
                         ch["description"], ch.get("markdown", "")
                     ]))
                 ]
@@ -164,7 +177,7 @@ class BrowserScreen(Screen):
         else:
             # tokenize on whitespace — each token is ANDed
             tokens = query.split()
-            matching = [ch for ch in CHALLENGES if match_challenge(ch, tokens)]
+            matching = [ch for ch in self.challenges if match_challenge(ch, tokens)]
 
         lv = self.query_one("#challenge-list", ListView)
         lv.clear()
@@ -198,8 +211,13 @@ class BrowserScreen(Screen):
             return
         
         challenge = self._active_item.challenge.copy()
-        challenge["image"] = "ghcr.io/programming-sai/clice/challenges/hello-clice:latest"
-        challenge["check_url"] = "https://raw.githubusercontent.com/Programming-Sai/clice-challenges/main/hello-clice/check.py"
+        # challenge["image"] = "ghcr.io/programming-sai/clice/challenges/hello-clice:latest"
+        # challenge["check_url"] = "https://raw.githubusercontent.com/Programming-Sai/clice-challenges/main/hello-clice/check.py"
+
+        if not challenge.get("image") or not challenge.get("check_url"):
+            self.app.notify("Challenge missing image or check_url", title="Error", severity="error")
+            return
+    
         self._starting_challenge = True
         loading = self.query_one(LoadingOverlay)
         loading.show("Preparing challenge...")

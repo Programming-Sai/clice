@@ -138,7 +138,7 @@ class SessionScreen(Screen):
         else:
             header = self.query_one("#sidebar-header", Static)
             content = self.query_one("#sidebar-content", Markdown)
-            header.update(f"║ CHALLENGE: {self.current_challenge['id']} – {self.current_challenge['title']} ║")
+            header.update(f"║ CHALLENGE: {self.current_challenge['id'][:5]} – {self.current_challenge['title']} ║")
             content.update(self.current_challenge.get("markdown", "_No description available._"))
             sidebar.add_class("visible")
             self.sidebar_visible = True
