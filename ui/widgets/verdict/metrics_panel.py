@@ -4,6 +4,9 @@ from rich.text import Text
 from ui.widgets.utils.design import (
     ACCENT_ERR, ACCENT_OK, BRAND, DIM_BRAND, TEXT, DIM_TEXT, get_difficulty_color
 )
+from engine.evaluator import evaluate
+
+
 
 class MetricsPanel(Static):
     """Left panel: challenge metadata + run metrics."""
@@ -13,31 +16,35 @@ class MetricsPanel(Static):
     correctness: reactive[float] = reactive(0.0)
     error_rate: reactive[float] = reactive(0.0)
 
-    def __init__(self, challenge: dict, is_passing: bool, **kwargs):
+    def __init__(self, challenge: dict, session_log: dict, is_passing: bool, **kwargs):
         super().__init__(**kwargs)
         self.challenge = challenge
+        self.session_log = session_log
         self.is_passing = is_passing
         self._update_metrics_from_session()
 
     def _update_metrics_from_session(self):
-        """Parse session log if available (override in on_mount)."""
-        # For demo, set random values based on pass/fail
-        import random
-        if self.is_passing:
-            self.total_commands = random.randint(3, 10)
-            self.correctness = random.uniform(85, 100)
-            self.error_rate = random.uniform(0, 10)
-            total_seconds = random.randint(30, 180)
-        else:
-            self.total_commands = random.randint(10, 25)
-            self.correctness = random.uniform(0, 60)
-            self.error_rate = random.uniform(30, 70)
-            total_seconds = random.randint(120, 600)
-
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        seconds = total_seconds % 60
-        self.time_elapsed = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        """Compute metrics from session log using the evaluator."""
+        try:
+            # Use the evaluator to compute metrics
+            metrics = evaluate(self.session_log)
+            
+            self.total_commands = metrics["command_count"]
+            self.error_rate = metrics["error_rate"]
+            self.correctness = metrics["correctness"] * 100  # Convert to percentage
+            
+            # Format time
+            time_seconds = metrics["time_seconds"]
+            hours = int(time_seconds // 3600)
+            minutes = int((time_seconds % 3600) // 60)
+            seconds = int(time_seconds % 60)
+            self.time_elapsed = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        except Exception as e:
+            # Fallback to defaults if evaluator fails
+            self.total_commands = 0
+            self.error_rate = 0.0
+            self.correctness = 0.0
+            self.time_elapsed = "00:00:00"
 
     def render(self) -> Text:
         t = Text()
@@ -53,26 +60,12 @@ class MetricsPanel(Static):
         row("TIME ELAPSED:", self.time_elapsed, BRAND)
         row("CORRECTNESS (%):", f"{self.correctness:.1f}%")
         row("ERROR RATE (%):", f"{self.error_rate:.1f}%")
-        t.append(" " + "─" * 32 + "\n", style=DIM_BRAND)
 
-        # Score (simplified: correctness as integer)
-        score = int(self.correctness)
-        # Progress bar
-        bar_width = 18
-        filled = int(bar_width * score / 100)
-        empty = bar_width - filled
-        t.append("\n SCORE\t ", style=DIM_TEXT)
-        t.append("[", style=DIM_BRAND)
-        t.append("█" * filled, style=ACCENT_OK if self.is_passing else ACCENT_ERR)
-        t.append(" " * empty, style=DIM_BRAND)
-        t.append("] ", style=DIM_BRAND)
-        t.append(f"{score}%", style=ACCENT_OK if self.is_passing else ACCENT_ERR)
-
-        t.append("\n\n")
+        t.append("\n")
         t.append(" " + "=" * 32 + "\n", style=DIM_BRAND)
-        t.append("\n\n")
+        t.append("\n")
 
-        t.append(f" {c['id']}  ", style=f"dim {BRAND}")
+        t.append(f" {c['code']}  ", style=f"dim {BRAND}")
         t.append(c["title"] + "\n", style=f"bold {BRAND}")
         t.append(" " + "─" * 32 + "\n", style=DIM_BRAND)
 

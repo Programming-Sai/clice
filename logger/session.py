@@ -162,3 +162,24 @@ class ShellSession:
             "goal_reached": False,
             "commands": self.commands
         }
+
+    def terminate(self):
+        """Forcefully close the shell without waiting for a prompt."""
+        trace("shell_terminate_begin", challenge_id=self.challenge_id)
+        if not self.child:
+            return
+        try:
+            if self.child.isalive():
+                self.child.sendline('exit')
+                try:
+                    self.child.expect(pexpect.EOF, timeout=3)
+                except Exception:
+                    pass
+        finally:
+            try:
+                if self.child.isalive():
+                    self.child.terminate(force=True)
+            except Exception as e:
+                trace("shell_terminate_error", error=repr(e))
+            trace("shell_terminate_done")
+            

@@ -1,3 +1,5 @@
+from logger.debug import trace
+
 import docker
 import tempfile
 import requests
@@ -105,11 +107,12 @@ ENTRYPOINT ["python", "/check.py"]
     def verify(self, challenge_id, user_container):
         """Run verification using pre-built checker image"""
         image_tag = self.checker_images.get(challenge_id)
-        if not image_tag:
-            raise ValueError(f"No checker image for {challenge_id}")
         
-        # Create and run checker container
+
+        container = None
         try:
+            if not image_tag:
+                raise ValueError(f"No checker image for {challenge_id}")
             container = self.docker.containers.create(
                 image_tag,
                 volumes={self.volume_name: {"bind": "/workspace", "mode": "ro"}},
@@ -117,28 +120,40 @@ ENTRYPOINT ["python", "/check.py"]
                 mem_limit="50m",
                 nano_cpus=500000000,
                 read_only=True,
+                tmpfs={"/tmp": ""},   # writable scratch space, still isolatedz
             )
-            
+
             container.start()
-            result = container.wait()
-            exit_code = result["StatusCode"]
-            
-            # Get logs
+            trace("verify_container_wait_begin", challenge_id=challenge_id)
+
+            try:
+                trace("verify_wait_start")
+                result = container.wait(timeout=20)
+                trace("verify_wait_done", status=result)
+                exit_code = result["StatusCode"]
+            except requests.exceptions.ReadTimeout as e:
+                print(f"Checker timed out for {challenge_id}")
+                trace("verify_wait_timeout", error=repr(e))
+                exit_code = -1
+
             logs = container.logs().decode().strip()
-            if logs:
-                print("Checker output:", logs)
-            else:
-                print("NO Logs")
-            
-            # Clean up
-            container.remove()
-            
+            trace("loader_verify_checker_output", logs=logs, exit_code=exit_code)
+            print("Checker output:" if logs else "NO Logs", logs)
+
             return exit_code == 0
-            
+
         except Exception as e:
+            trace("loader_verify_outer_exception", error=repr(e), error_type=type(e).__name__)
             print(f"Verification error: {e}")
             return False
-    
+        finally:
+            if container:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+
+
     def cleanup(self, container):
         """Stop and remove user container and volume"""
         try:

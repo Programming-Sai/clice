@@ -2,7 +2,8 @@
 import sys
 import json
 from pathlib import Path
-from loader.registry import ChallengeRegistry
+from ui.services.registry import RegistryService
+from ui.services.config import Config
 from loader.challenge_loader import ChallengeLoader
 from logger.session import ShellSession
 from engine.evaluator import evaluate
@@ -16,13 +17,16 @@ def main():
         sys.exit(1)
     
     command = sys.argv[1]
-    registry = ChallengeRegistry()
+    
+    config = Config()
+    registry = RegistryService(config)
     
     if command == "list":
-        challenges = registry.fetch()
+        challenges = registry.get_challenges()
         print("\nAvailable challenges:")
         for c in challenges:
-            print(f"  {c['id']} - {c['name']} ({c['difficulty']})")
+            display_id = c.get("code", c.get("id", "???")[:8])
+            print(f"  {display_id} - {c.get('title', 'Unknown')} ({c.get('difficulty', 'N/A')})")
         return
     
     if command == "run":
@@ -31,28 +35,53 @@ def main():
             print("Usage: clice run <challenge-id>")
             sys.exit(1)
         
-        challenge_id = sys.argv[2]
-        challenge_info = registry.get_challenge(challenge_id)
+        user_input = sys.argv[2]
+        challenges = registry.get_challenges()
+        challenge_info = None
+        
+        for c in challenges:
+            code = c.get("code", "")
+            uuid_full = c.get("id", "")  # id is the UUID
+            
+            # 1. Exact match on code
+            if code == user_input:
+                challenge_info = c
+                break
+            
+            # 2. Exact match on full UUID
+            if uuid_full == user_input:
+                challenge_info = c
+                break
+            
+            # 3. Match on first 8 characters of UUID
+            if len(user_input) >= 8 and uuid_full.startswith(user_input):
+                challenge_info = c
+                break
         
         if not challenge_info:
-            print(f"Challenge '{challenge_id}' not found")
+            print(f"Challenge '{user_input}' not found")
+            print("\nAvailable challenges:")
+            for c in challenges:
+                display_id = c.get("code", c.get("id", "???")[:8])
+                print(f"  {display_id} - {c.get('title', 'Unknown')}")
             sys.exit(1)
         
-        print(f"\n== {challenge_info['name']} == ")
-        print(f"{challenge_info['description']}\n")
+        # Get primary identifier (code) for display and internal use
         
-        # Load challenge (pulls image + builds checker)
+        
+        
+        print(f"\n== {challenge_info.get('title', challenge_info.get('code'))} ==")
+        print(f"{challenge_info.get('description', 'No description')}\n")
+        
         loader = ChallengeLoader()
         container = loader.load_challenge(challenge_info)
         print("✓ Environment ready\n")
         
-        # Start shell session
-        session = ShellSession(challenge_id, container_name=container.id)
+        session = ShellSession(challenge_info.get("id"), container_name=container.name)
         session.start()
         
         print("Type commands. Type ':submit' when done.\n")
         
-        # Interactive loop
         while True:
             cmd = input("$ ").strip()
             if not cmd:
@@ -72,23 +101,20 @@ def main():
             if output:
                 print(output)
         
-        # Submit, verify, evaluate
         log = session.submit()
         
         print("\nVerifying...")
-        passed = loader.verify(challenge_id, container)
+        passed = loader.verify(challenge_info.get("id"), container)
         
         log["goal_reached"] = passed
         metrics = evaluate(log)
         
-        # Save log
         safe_timestamp = log['started_at'].replace(":", "-")
-        log_path = Path("assets") / f"{challenge_id}_{safe_timestamp}.json"
+        log_path = Path("assets") / f"{challenge_info.get('id')}_{safe_timestamp}.json"
         log_path.parent.mkdir(exist_ok=True)
         with open(log_path, "w") as f:
             json.dump(log, f, indent=2)
         
-        # Report
         print("\n" + "="*50)
         print("RESULTS")
         print("="*50)
@@ -98,7 +124,6 @@ def main():
         print(f"Error rate: {metrics['error_rate']:.0f}%")
         print(f"Log saved: {log_path}")
         
-        # Cleanup
         loader.cleanup(container)
 
 if __name__ == "__main__":

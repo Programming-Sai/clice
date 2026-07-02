@@ -119,6 +119,7 @@ class BrowserScreen(Screen):
         query = event.value.strip()
 
         field_map = {
+            "code": "code",
             "title": "title",
             "cat":   "category",
             "id":    "id",
@@ -149,7 +150,7 @@ class BrowserScreen(Screen):
                     # bare word — must appear somewhere in the challenge
                     t = token.lower()
                     haystack = " ".join([
-                        ch["id"].lower()[:5], ch["title"].lower(),
+                        ch["id"].lower(), ch["id"].lower()[:5], ch["title"].lower(), ch["code"].lower(),
                         ch["category"].lower(), ch["description"].lower(),
                         ch.get("markdown", "").lower(),
                     ])
@@ -167,7 +168,7 @@ class BrowserScreen(Screen):
                 matching = [
                     ch for ch in self.challenges
                     if pattern.search(" ".join([
-                        ch["id"][:5], ch["title"], ch["category"],
+                        ch["id"], ch["id"][:5], ch["title"], ch["code"], ch["category"],
                         ch["description"], ch.get("markdown", "")
                     ]))
                 ]
@@ -238,7 +239,7 @@ class BrowserScreen(Screen):
 
                 def open_session() -> None:
                     try:
-                        self.app.push_screen(SessionScreen(challenge, True, True, container))
+                        self.app.push_screen(SessionScreen(challenge, True, True, container, loader=loader))
                         trace("browser_session_screen_pushed")
                     finally:
                         loading.hide()

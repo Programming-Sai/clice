@@ -7,6 +7,8 @@ Live terminal session for a challenge.
 from pathlib import Path
 from datetime import datetime
 import threading
+
+from textual import work
 from logger.session import ShellSession
 from logger.debug import trace
 from textual.screen import Screen
@@ -20,6 +22,7 @@ from ui.widgets.footer import Footer
 from ui.widgets.loading_overlay import LoadingOverlay
 from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_TEXT
 from ui.widgets.session.terminal_input import TerminalInput
+from verifier.check_runner import CheckRunner
 
 
 class SessionScreen(Screen):
@@ -39,7 +42,7 @@ class SessionScreen(Screen):
         Binding("escape", "app.pop_screen", "BACK", show=True),
     ]
 
-    def __init__(self, challenge: dict, sidebar_visible: bool, timer_visible: bool, container=None, container_name=None, **kwargs):
+    def __init__(self, challenge: dict, sidebar_visible: bool, timer_visible: bool, container=None, container_name=None,  loader=None, **kwargs):
         super().__init__(**kwargs)
         self.current_challenge = challenge
         self.sidebar_visible = sidebar_visible
@@ -53,6 +56,8 @@ class SessionScreen(Screen):
             self.container_name = None
         self.shell_session = None
         self.loading_overlay = None
+        self.loader = loader
+        self.volume_name = loader.volume_name if loader else None
         trace("screen_init", challenge_id=challenge.get("id"), container_name=getattr(container, "name", None))
 
     # ── LAYOUT ────────────────────────────────────────────────────────────────
@@ -138,7 +143,7 @@ class SessionScreen(Screen):
         else:
             header = self.query_one("#sidebar-header", Static)
             content = self.query_one("#sidebar-content", Markdown)
-            header.update(f"║ CHALLENGE: {self.current_challenge['id'][:5]} – {self.current_challenge['title']} ║")
+            header.update(f"║ CHALLENGE: {self.current_challenge['code']} – {self.current_challenge['title']} ║")
             content.update(self.current_challenge.get("markdown", "_No description available._"))
             sidebar.add_class("visible")
             self.sidebar_visible = True
@@ -193,32 +198,63 @@ class SessionScreen(Screen):
         self._run_command(command)
 
     def action_submit(self) -> None:
-        """Submit the session and show verdict."""
-        if self.shell_session:
+            trace("session_action_submit_begin")
+            self._stop_timer()
+            self.query_one(Footer).set_right_content("")
+            self.loading_overlay.show("Verifying challenge...")
+            self._do_verify()  # kick off the worker
+
+    @work(thread=True, exclusive=True)
+    def _do_verify(self) -> None:
+        trace("verify_thread_entered")
+        try:
+            trace("verify_before_shell_submit")
             log_data = self.shell_session.submit()
-        else:
-            # Old fallback kept for easy rollback while the shell integration is stabilized.
-            # import random
-            # goal_reached = random.choice([True, False])
-            # log_data = {
-            #     "challenge_id": self.current_challenge["id"],
-            #     "started_at": self.session_start_time.isoformat() if self.session_start_time else datetime.now().isoformat(),
-            #     "submitted_at": datetime.now().isoformat(),
-            #     "goal_reached": goal_reached,
-            #     "commands": [{"command": c, "timestamp": "", "exit_code": 0} for c in self.cmd_history]
-            # }
-            log_data = {
-                "challenge_id": self.current_challenge["id"],
-                "started_at": self.session_start_time.isoformat() if self.session_start_time else datetime.now().isoformat(),
-                "submitted_at": datetime.now().isoformat(),
-                "goal_reached": False,
-                "commands": [],
-            }
+            trace("verify_after_shell_submit")
+            log_data["challenge_id"] = self.current_challenge["id"]
 
-        self._stop_timer()
-        self.query_one(Footer).set_right_content("")
+            self.app.call_from_thread(self.loading_overlay.show, "Running verification checks...")
+            trace("verify_before_loader_verify")
+
+            loader = self.loader
+            trace("verify_loader_check", has_loader=bool(loader), loader_id=id(loader) if loader else None, volume_name=self.volume_name)
+            if not loader:
+                trace("verify_loader_fallback_triggered")
+                from loader.challenge_loader import ChallengeLoader
+                loader = ChallengeLoader()
+                loader.volume_name = self.volume_name
+
+            trace("verify_checker_images_keys", keys=list(loader.checker_images.keys()))
+
+            goal_reached = loader.verify(self.current_challenge["id"], self.container)
+            trace("verify_after_loader_verify", goal_reached=goal_reached)
+            log_data["goal_reached"] = goal_reached
+
+            if self.loader and self.container:
+                try:
+                    self.loader.cleanup(self.container)
+                    trace("verify_cleanup_done")
+                except Exception as e:
+                    trace("session_container_cleanup_error", error=repr(e))
+
+            self.app.call_from_thread(self._show_verdict, log_data)
+            trace("verify_show_verdict_called")
+
+        except Exception as e:
+            trace("verify_thread_exception", error=repr(e))
+            self.app.call_from_thread(self._show_verdict_error, str(e))
+    
+    def _show_verdict(self, log_data: dict) -> None:
+        trace("session_show_verdict_ui")
+        self.loading_overlay.hide()
         self.app.push_screen(VerdictScreen(self.current_challenge, log_data))
-
+        # SessionScreen stays on the stack underneath — do NOT pop it here
+    
+    def _show_verdict_error(self, error: str) -> None:
+        """Show error if verification fails."""
+        self.loading_overlay.hide()
+        self.notify(f"Verification failed: {error}", title="Error", severity="error")
+    
     # ── TIMER ──────────────────────────────────────────────────────────────────
 
     def _start_timer(self) -> None:
@@ -318,7 +354,10 @@ class SessionScreen(Screen):
             self.action_submit()
             return
         elif cmd in ("exit", "quit"):
-            self.exit()
+            log.write(f"[#888888]Closing session...[/]")
+            if self.shell_session:
+                self.shell_session.terminate()
+            self.app.pop_screen()
             return
         elif cmd in ("clear", "cls"):
             log.clear()
@@ -413,3 +452,8 @@ class SessionScreen(Screen):
     def on_unmount(self) -> None:
         """Clean up timer when screen is popped."""
         self._stop_timer(update_footer=False)
+        if self.shell_session:
+            try:
+                self.shell_session.terminate()
+            except Exception as e:
+                trace("session_unmount_shell_close_error", error=repr(e))

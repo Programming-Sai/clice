@@ -8,9 +8,16 @@ class Config:
     
     def __init__(self):
         # Look for .env in the app directory
-        env_path = Path(__file__).parent.parent / ".env"
-        if env_path.exists():
-            load_dotenv(env_path)
+        possible_paths = [
+            Path.cwd() / ".env",  # Current working directory
+            Path(__file__).parent.parent.parent / ".env",  # Project root
+            Path.home() / ".clice" / ".env",  # User config
+        ]
+        
+        for env_path in possible_paths:
+            if env_path.exists():
+                load_dotenv(env_path)
+                break
         
         # Registry settings
         self.registry_url = os.getenv(
@@ -31,7 +38,9 @@ class Config:
         self.docker_timeout = int(os.getenv("CLICE_DOCKER_TIMEOUT", "30"))
         
         # API keys (if any)
-        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
+        self.openrouter_model = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
+
 
     def ensure_config(self):
         """Create default .env if it doesn't exist."""
@@ -43,4 +52,6 @@ class Config:
     CLICE_CACHE_DIR=~/.clice/cache
     CLICE_LOGS_DIR=./assets
     CLICE_DOCKER_TIMEOUT=30
+    OPENROUTER_API_KEY=
+    OPENROUTER_MODEL=
     """)

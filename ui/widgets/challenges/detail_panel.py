@@ -64,7 +64,7 @@ class DetailPanel(ScrollableContainer):
 
     def update_challenge(self, challenge: dict) -> None:
         self.query_one("#session-status", Static).update(
-            f"[ ACTIVE_SESSION: {challenge['id']} ]"
+            f"[ ACTIVE_SESSION: {challenge['code']} ]"
         )
         self.query_one("#detail-title", Static).update(
             f"# {challenge['title']}"

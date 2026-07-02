@@ -20,6 +20,6 @@ class ChallengeListItem(ListItem):
         ch = self.challenge
         tags_str = "//".join(ch["tags"])
         with Vertical():
-            yield Label(f"{ch['id'][:5]}: {ch['title']}", classes="item-title")
+            yield Label(f"{ch['id'].split('-')[0]}: {ch['title']}", classes="item-title")
             yield Label(f"# {tags_str}", classes="item-tags")
 

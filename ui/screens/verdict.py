@@ -8,18 +8,18 @@ Layout priority:
   3. TIMELINE        — the raw log (slim strip at the bottom, always visible)
 """
 
+from textual import work
 from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, ScrollableContainer
-from textual.widgets import Static
 
 
-from ui.screens.data.verdicts import VERDICT_MD_FAIL, VERDICT_MD_PASS
+from engine.evaluator import evaluate
+from ui.services.ai_feedback import AIFeedbackService
 from ui.widgets.footer import Footer
 from ui.widgets.utils.design import (
     BRAND, ACCENT_OK, DIM_BRAND, BG, TEXT
 )
-from ui.widgets.verdict.eof_marker import EOFMarker
 from ui.widgets.verdict.metrics_panel import MetricsPanel
 from ui.widgets.verdict.timeline_box import TimelineBox
 from ui.widgets.verdict.title import BigTitle
@@ -154,8 +154,8 @@ class VerdictScreen(Screen):
         self.challenge = challenge
         self.session_log = session_log or {}
         self.is_passing = self.session_log.get("goal_reached", False)
-        self.verdict_md = VERDICT_MD_PASS if self.is_passing else VERDICT_MD_FAIL
         self.timeline_rows = self._build_timeline()
+        self.ai_feedback_loaded = False
 
     def _build_timeline(self):
         """Build timeline from session log commands."""
@@ -178,15 +178,15 @@ class VerdictScreen(Screen):
 
             with Horizontal(id="hero-row"):
                 with Vertical(id="metrics-box"):
-                    yield MetricsPanel(self.challenge, self.is_passing)
+                    yield MetricsPanel(self.challenge, self.session_log, self.is_passing)
                 with Vertical(id="verdict-box"):
-                    yield VerdictMarkdown(self.verdict_md, id="verdict-md")
+                    yield VerdictMarkdown("", id="verdict-md")
 
             with ScrollableContainer(id="timeline-box"):
                 yield TimelineBox(self.session_log)
                 # yield EOFMarker()
 
-            yield Footer()
+        yield Footer()
 
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("verdict")
@@ -196,7 +196,30 @@ class VerdictScreen(Screen):
         self.query_one("#verdict-box").border_title = "║ SYSTEM_VERDICT ║"
         self.query_one("#timeline-box").border_title = "║ TIMELINE ║"
 
+        self.query_one("#verdict-md").update("_Loading AI feedback..._")
+        self._fetch_ai_feedback()
+
+    @work(thread=True)
+    def _fetch_ai_feedback(self) -> None:
+        """Fetch AI feedback in the background."""
+        try:
+            metrics = evaluate(self.session_log)
+            service = AIFeedbackService()
+            feedback = service.generate_feedback(self.challenge, self.session_log, metrics)
+            
+            # Update the AI feedback widget
+            self.app.call_from_thread(self._update_ai_feedback, feedback)
+        except Exception as e:
+            self.app.call_from_thread(self._update_ai_feedback, f"_AI feedback error: {e}_")
+
+    def _update_ai_feedback(self, feedback: str) -> None:
+        """Update the AI feedback widget."""
+        # Clear the loading state and set feedback
+        self.query_one("#verdict-md").update(feedback)
+        self.ai_feedback_loaded = True
+
     def action_return_back(self) -> None:
+        self.app.pop_screen()
         self.app.pop_screen()
 
     def action_view_history(self) -> None:
