@@ -33,9 +33,9 @@ class HomeScreen(Screen):
         
         with Horizontal(id="main-row"):
             with Vertical(id="left-col"):
-                yield AboutPanel(classes="panel")
                 self.ready_panel = ReadyPanel(classes="panel")
                 yield self.ready_panel
+                yield AboutPanel(classes="panel")
             with Vertical(id="right-col"):
                 yield ActivityPanel(classes="panel")
         

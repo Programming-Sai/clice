@@ -48,7 +48,6 @@ Screen {
     layout: vertical;
     margin: 0 1 0 0;
     height: 100%;
-    border: solid transparent;
 }
 
 #right-col {
@@ -56,7 +55,6 @@ Screen {
     layout: vertical;
     margin: 0 0 0 1;
     height: 100%;
-    border: solid transparent;
 }
 
 /* ── PANELS ── */
@@ -65,6 +63,7 @@ Screen {
     padding: 1 2;
     margin-bottom: 1;
     color: #cccccc;
+    height: 1fr;
 }
 
 .panel-title {
@@ -74,10 +73,6 @@ Screen {
 }
 
 /* ── ABOUT PANEL ── */
-#about-panel {
-    height: auto;
-    min-height: 0;
-}
 
 #about-text {
     color: #888888;
@@ -85,9 +80,6 @@ Screen {
 }
 
 /* ── READY PANEL ── */
-#ready-panel {
-    height: 1fr;
-}
 
 .check-row {
     height: auto;
