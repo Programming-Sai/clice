@@ -6,6 +6,7 @@ Live terminal session for a challenge.
 
 from pathlib import Path
 from datetime import datetime
+import re
 import threading
 
 from textual import work
@@ -58,6 +59,7 @@ class SessionScreen(Screen):
         self.loading_overlay = None
         self.loader = loader
         self.volume_name = loader.volume_name if loader else None
+        self.current_prompt = PROMPT_TEXT  
         trace("screen_init", challenge_id=challenge.get("id"), container_name=getattr(container, "name", None))
 
     # ── LAYOUT ────────────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@ class SessionScreen(Screen):
                 self.shell_session.send_intr()
                 self.command_running = False
             log = self.query_one("#output-log", RichLog)
-            log.write(f"[bold #00e5cc]{PROMPT_TEXT}[/] ^C")
+            log.write(f"[bold #00e5cc]{self.current_prompt}[/] ^C")
 
     # ── HISTORY ───────────────────────────────────────────────────────────────
 
@@ -325,9 +327,35 @@ class SessionScreen(Screen):
         cmd_input = self.query_one("#cmd-input", TerminalInput)
         cmd_input.disabled = False
         self.session_start_time = datetime.now()
+        self._update_prompt_display(self.shell_session.current_prompt)
         self._write_welcome()
         cmd_input.focus()
         self._start_timer()
+
+    def _update_prompt_display(self, prompt: str) -> None:
+        """Update the prompt shown in the input row to match the shell's real prompt."""
+        if not prompt:
+            return
+        
+        # Clean the prompt: remove ANSI codes and trailing spaces
+        clean_prompt = re.sub(r'\x1b\[[0-9;]*[mK]', '', prompt).strip()
+        display = f"{clean_prompt} "
+        
+        self.current_prompt = display
+        
+        # Update the label
+        label = self.query_one("#prompt-label", Static)
+        label.update(display)
+        label.styles.width = len(display)
+        label.refresh(layout=True)
+        
+        # Update the input widget's prompt
+        input_widget = self.query_one("#cmd-input", TerminalInput)
+        input_widget.update_prompt(display)
+        
+        row = self.query_one("#prompt-row", Horizontal)
+        row.refresh(layout=True)
+
 
     def _on_shell_error(self, error: Exception) -> None:
         trace("screen_shell_error_ui", error=repr(error))
@@ -369,14 +397,17 @@ class SessionScreen(Screen):
         if self.shell_session:
             try:
                 # Write the command to the log
-                log.write(f"[bold #00e5cc]{PROMPT_TEXT}[/][#f0fafa]{command}[/]")
+                log.write(f"[bold #00e5cc]{self.current_prompt}[/][#f0fafa]{command}[/]")
                 
                 # Execute via shell
-                output, exit_code, elapsed = self.shell_session.execute(cmd)
+                output, exit_code, elapsed, prompt = self.shell_session.execute(cmd)
                 
                 # Display output
                 if output:
                     log.write(output)
+
+                if prompt:
+                    self._update_prompt_display(prompt)
                 
                 # # Show exit code and timing
                 # if exit_code == 0x:

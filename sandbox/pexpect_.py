@@ -29,6 +29,7 @@ def execute(cmd):
     flush_buffer()
 
     child.sendline(cmd)
+    prompt = ""
 
     try:
         child.expect(["\\$", "\\#"], timeout=30)
@@ -41,7 +42,8 @@ def execute(cmd):
 
     if clean.startswith(cmd):
         clean = clean[len(cmd):].lstrip()
-
+    
+    prompt = clean.split("\n")[-1]
     clean = re.sub(r"root@[a-f0-9]+:/[#$]?\s*$", "", clean).strip()
 
     child.sendline("echo $?")
@@ -50,7 +52,7 @@ def execute(cmd):
     exit_matches = re.findall(r"\b\d+\b", exit_raw)
     exit_code = int(exit_matches[-1]) if exit_matches else -1
 
-    return clean, exit_code
+    return clean, exit_code, prompt
 
 
 while True:
@@ -58,8 +60,8 @@ while True:
     if cmd == ":quit":
         break
 
-    output, exit_code = execute(cmd)
-    print(f"\n[exit: {exit_code}]\n{output}\n")
+    output, exit_code, prompt = execute(cmd)
+    print(f"\n[exit: {exit_code}]\n{output}\n=====\n{prompt}\n=====\n")
 
 child.sendline("exit")
 child.expect(pexpect.EOF)

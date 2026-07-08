@@ -1,15 +1,8 @@
-
 from textual.containers import ScrollableContainer
 from textual.widgets import TextArea
-from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_PAD
 from textual.widgets.text_area import TextAreaTheme
+from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_PAD
 
-
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  WIDGET: TerminalInput
-# ══════════════════════════════════════════════════════════════════════════════
 
 class TerminalInput(TextArea):
     DEFAULT_CSS = """
@@ -28,6 +21,11 @@ class TerminalInput(TextArea):
     }
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._prompt_len = PROMPT_LEN
+        self._prompt_pad = PROMPT_PAD
+
     def on_mount(self) -> None:
         self._reset()
         theme = TextAreaTheme(
@@ -38,14 +36,24 @@ class TerminalInput(TextArea):
         self.theme = "clice"
 
     def _reset(self) -> None:
-        self.load_text(PROMPT_PAD)
-        self.move_cursor((0, PROMPT_LEN))
+        """Reset the input to just the prompt padding."""
+        self.load_text(self._prompt_pad)
+        self.move_cursor((0, self._prompt_len))
 
     def get_input(self) -> str:
+        """Get the user's input text (without the prompt padding)."""
         lines = self.text.split("\n")
-        first = lines[0][PROMPT_LEN:]
+        if not lines:
+            return ""
+        first = lines[0][self._prompt_len:]
         rest = lines[1:]
         return "\n".join([first] + rest).strip()
+
+    def update_prompt(self, prompt: str) -> None:
+        """Update the prompt prefix when it changes."""
+        self._prompt_len = len(prompt)
+        self._prompt_pad = " " * self._prompt_len
+        self._reset()
 
     def _on_key(self, event) -> None:
         row, col = self.cursor_location
@@ -62,20 +70,24 @@ class TerminalInput(TextArea):
             self.screen.handle_terminal_submit(self.get_input())
             return
 
+        # Backspace: only block if cursor is BEFORE the prompt
         if event.key == "backspace":
-            if row == 0 and col <= PROMPT_LEN:
+            if row == 0 and col < self._prompt_len:
                 event.prevent_default()
                 event.stop()
                 return
+            # If col >= self._prompt_len, allow backspace to work normally
 
+        # Delete: only block if cursor is BEFORE the prompt
         if event.key == "delete":
-            if row == 0 and col < PROMPT_LEN:
+            if row == 0 and col < self._prompt_len:
                 event.prevent_default()
                 event.stop()
                 return
 
+        # Left arrow: only block if cursor is BEFORE the prompt
         if event.key == "left":
-            if row == 0 and col <= PROMPT_LEN:
+            if row == 0 and col <= self._prompt_len:
                 event.prevent_default()
                 event.stop()
                 return
@@ -84,7 +96,7 @@ class TerminalInput(TextArea):
             event.prevent_default()
             event.stop()
             if row == 0:
-                self.move_cursor((0, PROMPT_LEN))
+                self.move_cursor((0, self._prompt_len))
             else:
                 self.move_cursor((row, 0))
             return
@@ -92,7 +104,7 @@ class TerminalInput(TextArea):
         if event.key == "ctrl+a":
             event.prevent_default()
             event.stop()
-            self.move_cursor((0, PROMPT_LEN))
+            self.move_cursor((0, self._prompt_len))
             return
 
         if event.key == "ctrl+u":
@@ -105,7 +117,7 @@ class TerminalInput(TextArea):
             event.prevent_default()
             event.stop()
             row, col = self.cursor_location
-            min_col = PROMPT_LEN if row == 0 else 0
+            min_col = self._prompt_len if row == 0 else 0
             line = self.text.split("\n")[row]
             before = line[:col].rstrip()
             last_space = before.rfind(" ")
@@ -127,28 +139,32 @@ class TerminalInput(TextArea):
             self.screen.action_history_down()
             return
 
-
         super()._on_key(event)
 
     def action_select_all(self) -> None:
+        """Select all user input (excluding prompt padding)."""
         lines = self.text.split("\n")
         last_row = len(lines) - 1
         last_col = len(lines[-1])
-        self.selection = ((0, PROMPT_LEN), (last_row, last_col))  # type: ignore
+        self.selection = ((0, self._prompt_len), (last_row, last_col))
 
     def load_history(self, cmd: str) -> None:
-        self.load_text(PROMPT_PAD + cmd)
+        """Load a command from history into the input."""
+        self.load_text(self._prompt_pad + cmd)
         lines = self.text.split("\n")
         last_row = len(lines) - 1
         self.move_cursor((last_row, len(lines[-1])))
 
     def on_paste(self, event) -> None:
+        """Handle paste events."""
         self.screen.query_one("#terminal-scroll", ScrollableContainer).scroll_end(animate=False)
 
     def on_click(self, event) -> None:
+        """Handle click events to guard cursor position."""
         self.call_after_refresh(self._guard_cursor)
 
     def _guard_cursor(self) -> None:
+        """Ensure cursor doesn't go into the prompt area."""
         row, col = self.cursor_location
-        if row == 0 and col < PROMPT_LEN:
-            self.move_cursor((0, PROMPT_LEN))
+        if row == 0 and col < self._prompt_len:
+            self.move_cursor((0, self._prompt_len))

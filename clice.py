@@ -35,10 +35,14 @@ def main():
             print("Usage: clice run <challenge-id>")
             sys.exit(1)
         
-        user_input = sys.argv[2]
-        challenges = registry.get_challenges()
-        challenge_info = None
         
+        user_input = sys.argv[2]
+        mode = 'container'
+        if len(sys.argv) > 3: 
+            mode = sys.argv[3]
+        challenges = registry.get_challenges()
+        # challenges = []
+        challenge_info = None
         for c in challenges:
             code = c.get("code", "")
             uuid_full = c.get("id", "")  # id is the UUID
@@ -74,10 +78,10 @@ def main():
         print(f"{challenge_info.get('description', 'No description')}\n")
         
         loader = ChallengeLoader()
-        container = loader.load_challenge(challenge_info)
+        container = None if mode == 'raw' else loader.load_challenge(challenge_info)
         print("✓ Environment ready\n")
         
-        session = ShellSession(challenge_info.get("id"), container_name=container.name)
+        session = ShellSession(challenge_info.get("id"), container_name=None)
         session.start()
         
         print("Type commands. Type ':submit' when done.\n")
@@ -93,20 +97,21 @@ def main():
                 loader.cleanup(container)
                 return
             
-            output, exit_code, elapsed = session.execute(cmd)
+            output, exit_code, elapsed, prompt = session.execute(cmd)
             if exit_code == 0:
                 print(f"[{elapsed:.2f}s]")
             else:
                 print(f"[{elapsed:.2f}s] (exit {exit_code})")
             if output:
                 print(output)
+            print(f"\n======\n {prompt} \n======\n")
         
         log = session.submit()
         
         print("\nVerifying...")
         passed = loader.verify(challenge_info.get("id"), container)
         
-        log["goal_reached"] = passed
+        # log["goal_reached"] = passed
         metrics = evaluate(log)
         
         safe_timestamp = log['started_at'].replace(":", "-")
@@ -124,7 +129,7 @@ def main():
         print(f"Error rate: {metrics['error_rate']:.0f}%")
         print(f"Log saved: {log_path}")
         
-        loader.cleanup(container)
+        # loader.cleanup(container)
 
 if __name__ == "__main__":
     main()
