@@ -163,7 +163,8 @@ class ShellSession:
             "command": command,
             "output": clean,
             "exit_code": exit_code,
-            "elapsed_seconds": round(elapsed, 3)
+            "elapsed_seconds": round(elapsed, 3),
+            "timestamp": datetime.now().strftime("%H:%M:%S"), 
         })
         trace("shell_execute_done", command=command, exit_code=exit_code, elapsed=round(elapsed, 3))
         

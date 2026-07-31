@@ -35,6 +35,12 @@ class Footer(Static):
             ("H", "HISTORY"),
             ("Q", "QUIT"),
         ],
+        "history": [
+            ("Space", "View"),
+            ("D", "DELETE"),
+            ("C", "CLEAR"),
+            ("Esc", "BACK"),
+        ],
     }
 
     def __init__(self, **kwargs):

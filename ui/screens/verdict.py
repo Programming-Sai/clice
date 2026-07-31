@@ -24,6 +24,8 @@ from ui.widgets.verdict.metrics_panel import MetricsPanel
 from ui.widgets.verdict.timeline_box import TimelineBox
 from ui.widgets.verdict.title import BigTitle
 from ui.widgets.verdict.verdict_markdown import VerdictMarkdown
+from ui.services.history import HistoryService
+from textual.binding import Binding
 
 
 
@@ -146,16 +148,19 @@ class VerdictScreen(Screen):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("enter", "return_back", "Back"),
+        Binding("escape", "app.pop_screen", "Back", show=True),
         ("h", "view_history", "View History"),
     ]
 
-    def __init__(self, challenge: dict, session_log: dict = None, **kwargs):
+    def __init__(self, challenge: dict, session_log: dict = None, session_id: str = None, **kwargs):
         super().__init__(**kwargs)
         self.challenge = challenge
         self.session_log = session_log or {}
+        self.session_id = session_id
         self.is_passing = self.session_log.get("goal_reached", False)
         self.timeline_rows = self._build_timeline()
         self.ai_feedback_loaded = False
+        self.metrics = {}
 
     def _build_timeline(self):
         """Build timeline from session log commands."""
@@ -197,15 +202,24 @@ class VerdictScreen(Screen):
         self.query_one("#timeline-box").border_title = "║ TIMELINE ║"
 
         self.query_one("#verdict-md").update("_Loading AI feedback..._")
-        self._fetch_ai_feedback()
+        self.metrics = evaluate(self.session_log)
+        existing_feedback = self.session_log.get("ai_feedback")
+
+        if existing_feedback:
+            # Use existing feedback from stored session
+            self.query_one("#verdict-md").update(existing_feedback)
+            self.ai_feedback_loaded = True
+        else:
+            # New session — fetch AI feedback
+            self.query_one("#verdict-md").update("_Loading AI feedback..._")
+            self._fetch_ai_feedback()
 
     @work(thread=True)
     def _fetch_ai_feedback(self) -> None:
         """Fetch AI feedback in the background."""
         try:
-            metrics = evaluate(self.session_log)
             service = AIFeedbackService()
-            feedback = service.generate_feedback(self.challenge, self.session_log, metrics)
+            feedback = service.generate_feedback(self.challenge, self.session_log, self.metrics)
             
             # Update the AI feedback widget
             self.app.call_from_thread(self._update_ai_feedback, feedback)
@@ -217,6 +231,10 @@ class VerdictScreen(Screen):
         # Clear the loading state and set feedback
         self.query_one("#verdict-md").update(feedback)
         self.ai_feedback_loaded = True
+
+        if self.session_id:            
+            history = HistoryService()
+            history.update_session(self.session_id, self.metrics, feedback)
 
     def action_return_back(self) -> None:
         self.app.pop_screen()

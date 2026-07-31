@@ -1,5 +1,6 @@
 from textual.app import ComposeResult
 from textual.widgets import Static, DataTable
+from ui.services.history import HistoryService
 
 
 # SHOW_EMPTY_STATE = True
@@ -40,27 +41,45 @@ ACTIVITY_DATA = [
 class ActivityPanel(Static):
     def compose(self) -> ComposeResult:
         yield Static("║ RECENT ATTEMPTS ║", classes="panel-title")
-        if SHOW_EMPTY_STATE:
-            yield Static(
-                "─── NO ATTEMPTS YET ───\n\n"
-                "Press [N] to start your first challenge.",
-                id="empty-state"
-            )
-        else:
-            yield DataTable(show_cursor=True)
+        self.empty_state = Static(
+            "─── NO ATTEMPTS YET ───\n\n"
+            "Press [N] to start your first challenge.",
+            id="empty-state"
+        )
+        self.table = DataTable(show_cursor=True)
+        
+        yield self.empty_state
+        yield self.table
 
     def on_mount(self) -> None:
-        if not SHOW_EMPTY_STATE:
-            table = self.query_one(DataTable)
-            table.add_column("TIMESTAMP",  width=22)
-            table.add_column("CHALLENGE",  width=20)
-            table.add_column("DURATION",   width=12)
-            table.add_column("RESULT",     width=10)
+        # Load from history service
+        history = HistoryService()
+        sessions = history.get_sessions()
+        
+        if sessions:
+            self.empty_state.display = False
+            self.table.display = True
 
-            for timestamp, task_id, duration, status in ACTIVITY_DATA:
-                styled_task   = f"[cyan]{task_id}[/cyan]"
+            table = self.table
+            table.add_column("TIMESTAMP", width=22)
+            table.add_column("CHALLENGE", width=20)
+            table.add_column("DURATION", width=12)
+            table.add_column("RESULT", width=10)
+            
+            for session in sessions[:5]:  # Show last 5
+                timestamp = session.get("started_at", "")[:16]
+                challenge = session.get("challenge_code", "Unknown")
+                duration_secs = session.get("duration_seconds", 0)
+                hours = int(duration_secs // 3600)
+                minutes = int((duration_secs % 3600) // 60)
+                seconds = int(duration_secs % 60)
+                duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                status = session.get("status", "UNKNOWN")
                 styled_status = "[cyan b][PASS][/cyan b]" if status == "PASS" else "[red b][FAIL][/red b]"
-                table.add_row(timestamp, styled_task, duration, styled_status)
+                table.add_row(timestamp, challenge, duration, styled_status)
+        else:
+            self.empty_state.display = True
+            self.table.display = False
 
         self.border_title = "03 / HISTORY"
 

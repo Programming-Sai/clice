@@ -23,8 +23,8 @@ from ui.widgets.footer import Footer
 from ui.widgets.loading_overlay import LoadingOverlay
 from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_TEXT
 from ui.widgets.session.terminal_input import TerminalInput
-from verifier.check_runner import CheckRunner
-
+from ui.services.history import HistoryService
+    
 
 class SessionScreen(Screen):
     """Live terminal session for a challenge."""
@@ -248,8 +248,12 @@ class SessionScreen(Screen):
     
     def _show_verdict(self, log_data: dict) -> None:
         trace("session_show_verdict_ui")
+
+        history = HistoryService()
+        session_id = history.save_session(log_data, self.current_challenge)
+
         self.loading_overlay.hide()
-        self.app.push_screen(VerdictScreen(self.current_challenge, log_data))
+        self.app.push_screen(VerdictScreen(self.current_challenge, log_data, session_id))
         # SessionScreen stays on the stack underneath — do NOT pop it here
     
     def _show_verdict_error(self, error: str) -> None:

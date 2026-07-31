@@ -2,6 +2,7 @@
 from pathlib import Path
 from textual.app import App
 from ui.screens import HomeScreen, BrowserScreen
+from ui.screens.history import HistoryScreen
 from ui.screens.session import SessionScreen
 from ui.screens.verdict import VerdictScreen
 from ui.widgets.footer import Footer   # or from .screens import ...
@@ -57,6 +58,7 @@ class CliceApp(App):
         "browser": BrowserScreen,
         "session": SessionScreen,
         "verdict": VerdictScreen,
+        "history": HistoryScreen,
     }
 
     
@@ -76,7 +78,7 @@ class CliceApp(App):
         self.push_screen("home")  # ← FIXED: actually push the screen
     
     def action_history(self) -> None:
-        self.notify("📜  HISTORY — not yet implemented!", title="CLICE")
+        self.push_screen("history")
     
     def action_settings(self) -> None:
         self.notify("⚙️  SETTINGS — not yet implemented!", title="CLICE")
@@ -94,3 +96,10 @@ if __name__ == "__main__":
 # TODO we need to track activity history and do proper routing for that... so on th ehome page, you view your past activities, and then when you select one, you go to its verdict screen and from there... you can redo it which you can choose to use to overwrite your previous score or to do a new instance of that same problem.
 # TODO we need to have a unified design system for the entire app.
 # TODO we need to have a unified prompt text. right now it is hard coded. we need one directly from the session itself.
+""" 
+TODO edge cases to check out for.
+
+- What happens when you close the app in the middle of a session
+- what happens when you close out in the middle of any screen
+- what happwns if you close out in the middle of transitions between screens 
+"""

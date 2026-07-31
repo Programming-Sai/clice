@@ -1,0 +1,193 @@
+/* The whole screen's background and default text color. */
+Screen {
+    background: #131313;
+    color: #c8d3d9;
+}
+
+/* -------------------------------------------------------------
+    TOP BAR
+------------------------------------------------------------- */
+#top_bar {
+    height: auto;            /* grow to fit its contents - never clips! */
+    min-height: 3;
+    background: #131313;     /* same background as everything else */
+    border-bottom: solid #005f5f;   /* teal border, sampled from your new screenshot */
+    padding: 1 2;             /* a little breathing room inside */
+    align: left middle;       /* line everything up in the middle vertically */
+}
+
+#brand {
+    color: #00fbfa;           /* bright cyan, sampled from your logo text */
+    text-style: bold;
+    width: auto;
+}
+
+#brand_sub {
+    color: #7d8b96;
+    width: auto;
+    margin-left: 2;
+}
+
+/* This invisible box grows to fill empty space, pushing things apart -
+    like an invisible spring between books on a shelf. */
+.spacer {
+    width: 1fr;
+    background: #131313;
+}
+
+.nav_item {
+    width: auto;
+    color: #7d8b96;
+    margin-left: 3;
+}
+
+/* The currently selected nav tab (RESULTS) glows cyan with an underline. */
+.nav_active {
+    color: #00fbfa;
+    text-style: bold underline;
+}
+
+/* -------------------------------------------------------------
+    STATS BAR
+------------------------------------------------------------- */
+#stats_bar {
+    height: auto;             /* grow to fit its contents - never clips! */
+    min-height: 4;
+    background: #131313;
+    border-bottom: solid #005f5f;   /* same teal border as the top bar */
+    padding: 1 2;
+    align: left middle;
+}
+
+/* Each stat block gets a FIXED width instead of "auto". A fixed
+    number (like 28) never needs Textual to "measure" anything, so it
+    can never collapse to zero - that's the whole bug fix. */
+.stat_block {
+    width: 28;
+    height: auto;
+    background: #131313;
+}
+
+/* -------------------------------------------------------------
+    SEARCH BAR
+------------------------------------------------------------- */
+#search_bar {
+    height: 3;                 /* exactly one line tall - no extra blank space below */
+    background: #131313;
+    align: left middle;
+    padding: 0 2;
+}
+
+#search_label {
+    width: auto;
+    color: #c8d3d9;
+    background: #131313;
+    text-style: bold;
+}
+
+#search_box {
+    width: 1fr;                 /* 1fr = "stretch and fill whatever room is left" */
+    height: 1;                  /* one line tall, matches the row around it */
+    margin-left: 1;
+    # background: #1a1a1a;        /* just a touch lighter so you can see the box */
+    # background: transparent;
+    background: #131313;
+    color: #00fbfa;
+    border: none;
+    padding: 0;                 /* no extra space above/below the typed text */
+}
+
+/* -------------------------------------------------------------
+    THE MAIN TABLE
+------------------------------------------------------------- */
+/* This is the big change inspired by your new screenshot: a full
+    teal border box around the table, just like the CHALLENGE_DETAILS
+    panel in that design. height: 1fr makes this box stretch to fill
+    ALL the space left over between the search bar and the bottom bar
+    - and because that space is limited, the DataTable inside starts
+    scrolling ITSELF instead of the whole screen scrolling. That's
+    what keeps the top bar, stats bar, and search bar frozen in place
+    while only the table content moves. */
+#table_panel {
+    border: solid #005f5f;     /* the teal border box, sampled from your screenshot */
+    height: 1fr;
+    background: #131313;
+    padding: 0 0 1 0;           /* one blank line of breathing room at the very bottom */
+}
+
+#session_table {
+    background: #131313;
+    color: #c8d3d9;
+    width: 1fr;
+    height: 1fr;                /* fill the whole panel so IT scrolls, not the screen */
+}
+
+/* -------------------------------------------------------------
+    EMPTY STATE
+------------------------------------------------------------- */
+/* This is what shows up INSTEAD of the table whenever there are no
+    rows to display - either because every session got deleted, or
+    because the search box doesn't match anything. It starts hidden
+    (display: none) and refresh_table() below flips it on/off. */
+#empty_state {
+    display: none;
+    width: 1fr;
+    height: 1fr;
+    content-align: center middle;   /* centers the text both ways */
+    color: #5c6b76;
+    text-align: center;
+}
+
+/* This class is what actually does the showing/hiding - Textual lets
+    us just add or remove a class instead of writing an if/else for
+    every single style property. */
+#empty_state.visible {
+    display: block;
+}
+
+/* The header row of the table (#, TIMESTAMP, CHALLENGE, ...) */
+#session_table > .datatable--header {
+    background: #131313;
+    color: #7d8b96;
+    text-style: bold;
+}
+
+/* The row your cursor/keyboard is currently sitting on - bright cyan,
+    just like the highlighted row in your picture! */
+#session_table > .datatable--cursor {
+    background: #00fbfa;
+    color: #131313;
+}
+
+/* -------------------------------------------------------------
+    BOTTOM BAR
+------------------------------------------------------------- */
+#bottom_bar {
+    height: auto;               /* let it size itself, border included - see note below */
+    min-height: 1;
+    background: #131313;
+    dock: bottom;              /* glue this bar to the very bottom of the screen */
+    border-top: solid #005f5f;  /* same teal separator style as the rest of the app */
+    padding: 0 2;
+    align: left middle;
+}
+
+.hint {
+    width: auto;
+    color: #5c6b76;
+    background: #131313;
+    margin-right: 3;
+}
+
+#storage {
+    width: auto;
+    color: #5c6b76;
+    background: #131313;
+    margin-right: 2;
+}
+
+#stable_tag {
+    width: auto;
+    color: #4ade80;
+    background: #131313;
+}

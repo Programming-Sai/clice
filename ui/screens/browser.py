@@ -34,7 +34,7 @@ class BrowserScreen(Screen):
         Binding("down",   "cursor_down", "Navigate down", show=True),
         Binding("slash",  "search",      "Search",        show=True),
         Binding("escape", "app.pop_screen", "Back", show=True),
-        Binding("ctrl+enter", "start_challenge", "Start", show=True),
+        Binding("alt+x", "start_challenge", "Start", show=True),
     ]
 
     def __init__(self, **kwargs):
