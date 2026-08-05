@@ -135,6 +135,12 @@ class ShellSession:
         # leaked prompt lines left over from timing races
         clean = _strip_control_sequences(raw_output)
         clean = PROMPT_LEAK_RE.sub('', clean)
+        # Always strip leading CR/LF left over from the PTY echoing our sent
+        # command - this residue precedes EVERY command's echo, not just the
+        # first. Gating this on "is this the first command" meant the
+        # startswith() check below silently failed for every command after
+        # the first, leaving the echoed input text baked into the output.
+        clean = clean.lstrip('\r\n')
         if not self.commands:
             clean = clean.lstrip('\r\n"\' ')
         if clean.startswith(command):

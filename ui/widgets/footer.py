@@ -31,7 +31,7 @@ class Footer(Static):
             ("Esc", "BACK"),
         ],
         "verdict": [
-            ("Enter", "BROWSER"),
+            ("Enter", "BACK"),
             ("H", "HISTORY"),
             ("Q", "QUIT"),
         ],
@@ -39,6 +39,12 @@ class Footer(Static):
             ("Space", "View"),
             ("D", "DELETE"),
             ("C", "CLEAR"),
+            ("Esc", "BACK"),
+        ],
+        "settings": [
+            ("Tab", "AUTOCOMPLETE"),
+            ("Enter", "EXECUTE"),
+            ("^S", "SAVE"),
             ("Esc", "BACK"),
         ],
     }

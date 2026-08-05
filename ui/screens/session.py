@@ -58,7 +58,6 @@ class SessionScreen(Screen):
         self.shell_session = None
         self.loading_overlay = None
         self.loader = loader
-        self.volume_name = loader.volume_name if loader else None
         self.current_prompt = PROMPT_TEXT  
         trace("screen_init", challenge_id=challenge.get("id"), container_name=getattr(container, "name", None))
 
@@ -219,18 +218,24 @@ class SessionScreen(Screen):
             trace("verify_before_loader_verify")
 
             loader = self.loader
-            trace("verify_loader_check", has_loader=bool(loader), loader_id=id(loader) if loader else None, volume_name=self.volume_name)
+            trace("verify_loader_check", has_loader=bool(loader), loader_id=id(loader) if loader else None)
             if not loader:
                 trace("verify_loader_fallback_triggered")
                 from loader.challenge_loader import ChallengeLoader
                 loader = ChallengeLoader()
-                loader.volume_name = self.volume_name
+                # No checker script cached on a fresh loader instance - verify()
+                # will report "no checker script cached" rather than crash, but
+                # this path means load_challenge() was skipped somewhere upstream.
 
-            trace("verify_checker_images_keys", keys=list(loader.checker_images.keys()))
+            trace("verify_check_scripts_keys", keys=list(loader.check_scripts.keys()))
 
-            goal_reached = loader.verify(self.current_challenge["id"], self.container)
-            trace("verify_after_loader_verify", goal_reached=goal_reached)
+            verify_result = loader.verify(self.current_challenge["id"], self.container)
+            goal_reached = verify_result["passed"]
+            trace("verify_after_loader_verify", goal_reached=goal_reached, exit_code=verify_result["exit_code"])
             log_data["goal_reached"] = goal_reached
+            log_data["checker_output"] = verify_result["output"]
+            log_data["checker_exit_code"] = verify_result["exit_code"]
+            log_data["checker_error"] = verify_result["error"]
 
             if self.loader and self.container:
                 try:

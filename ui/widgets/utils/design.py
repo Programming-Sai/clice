@@ -1,6 +1,3 @@
-
-
-
 IS_PASSING: bool = False   # ← change to True to see the FAIL screen
 
 
@@ -14,6 +11,7 @@ IS_PASSING: bool = False   # ← change to True to see the FAIL screen
 BRAND      = "#00e5cc"   # main teal  — borders, section headers, timestamps
 ACCENT_OK  = "#00ff88"   # bright green — scores, exit codes on PASS
 ACCENT_ERR = "#ff3c3c"   # bright red   — scores, exit codes on FAIL
+ACCENT_WARN = "#ffb84d"  # amber — environment/infrastructure error, not a real pass or fail
 DIM_BRAND  = "#005c54"   # dark teal    — muted separators, dim borders
 BG         = "#0a0f0e"   # near-black background
 TEXT       = "#c8fff9"   # soft off-white — main readable body text

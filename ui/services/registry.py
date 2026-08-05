@@ -46,7 +46,12 @@ class RegistryService:
     
     def get_challenges(self, force_refresh: bool = False) -> list:
         """Get all challenges from the registry."""
-        if force_refresh or not self.CACHE_FILE.exists() or not self.HASH_FILE.exists():
+        if (
+            force_refresh
+            or not self.CACHE_FILE.exists()
+            or not self.HASH_FILE.exists()
+            or not self.is_synced()
+        ):
             self._fetch_and_cache()
         return self._load_cache()
     

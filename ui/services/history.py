@@ -5,13 +5,19 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
 
+from ui.services.config import Config
+
 class HistoryService:
     """Handles saving, loading, and deleting session logs."""
-    
-    SESSIONS_DIR = Path("assets/sessions")
-    INDEX_FILE = SESSIONS_DIR / "index.json"
-    
-    def __init__(self):
+
+    def __init__(self, config: Config = None):
+        config = config or Config()
+        # CLICE_LOGS_DIR (via Config.logs_dir) previously wasn't wired to
+        # anything - sessions always went to a hardcoded "assets/sessions"
+        # regardless of that setting. Now it actually controls where
+        # session logs live.
+        self.SESSIONS_DIR = config.logs_dir / "sessions"
+        self.INDEX_FILE = self.SESSIONS_DIR / "index.json"
         self.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
         self._ensure_index()
     
@@ -44,6 +50,9 @@ class HistoryService:
             "submitted_at": session_log.get("submitted_at"),
             "goal_reached": session_log.get("goal_reached", False),
             "commands": session_log.get("commands", []),
+            "checker_output": session_log.get("checker_output", ""),
+            "checker_exit_code": session_log.get("checker_exit_code"),
+            "checker_error": session_log.get("checker_error"),
             "metrics": {},  # Will be filled later
             "ai_feedback": ""  # Will be filled later
         }

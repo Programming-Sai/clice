@@ -149,7 +149,6 @@ class VerdictScreen(Screen):
         ("q", "quit", "Quit"),
         ("enter", "return_back", "Back"),
         Binding("escape", "app.pop_screen", "Back", show=True),
-        ("h", "view_history", "View History"),
     ]
 
     def __init__(self, challenge: dict, session_log: dict = None, session_id: str = None, **kwargs):
@@ -158,6 +157,16 @@ class VerdictScreen(Screen):
         self.session_log = session_log or {}
         self.session_id = session_id
         self.is_passing = self.session_log.get("goal_reached", False)
+        # checker_error means the checker never produced a real verdict at all
+        # (missing interpreter, timeout, couldn't stage the script) - that's
+        # distinct from actually failing the challenge, and gets its own
+        # amber banner instead of being lumped in with a real FAIL.
+        if self.session_log.get("checker_error"):
+            self.verdict_state = "error"
+        elif self.is_passing:
+            self.verdict_state = "pass"
+        else:
+            self.verdict_state = "fail"
         self.timeline_rows = self._build_timeline()
         self.ai_feedback_loaded = False
         self.metrics = {}
@@ -179,7 +188,7 @@ class VerdictScreen(Screen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="root-container"):
-            yield BigTitle(self.is_passing)
+            yield BigTitle(self.verdict_state)
 
             with Horizontal(id="hero-row"):
                 with Vertical(id="metrics-box"):
@@ -195,7 +204,7 @@ class VerdictScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("verdict")
-        result_word = "PASS" if self.is_passing else "FAIL"
+        result_word = {"pass": "PASS", "fail": "FAIL", "error": "ERROR"}[self.verdict_state]
         self.title = f"{result_word} — {self.challenge['id']} {self.challenge['title']}"
         self.query_one("#metrics-box").border_title = "║ METRICS ║"
         self.query_one("#verdict-box").border_title = "║ SYSTEM_VERDICT ║"
@@ -240,9 +249,6 @@ class VerdictScreen(Screen):
         self.app.pop_screen()
         self.app.pop_screen()
 
-    def action_view_history(self) -> None:
-        self.notify("History view coming soon", title="CLICE")
 
     def action_quit(self) -> None:
         self.app.exit()
-

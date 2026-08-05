@@ -4,6 +4,7 @@ from textual.app import App
 from ui.screens import HomeScreen, BrowserScreen
 from ui.screens.history import HistoryScreen
 from ui.screens.session import SessionScreen
+from ui.screens.settings import SettingsScreen
 from ui.screens.verdict import VerdictScreen
 from ui.widgets.footer import Footer   # or from .screens import ...
 from logger.debug import trace
@@ -54,11 +55,12 @@ class CliceApp(App):
     
     # Register screens
     SCREENS = {
-        "home": HomeScreen,
-        "browser": BrowserScreen,
-        "session": SessionScreen,
-        "verdict": VerdictScreen,
-        "history": HistoryScreen,
+        "home":     HomeScreen,
+        "browser":  BrowserScreen,
+        "session":  SessionScreen,
+        "verdict":  VerdictScreen,
+        "history":  HistoryScreen,
+        "settings": SettingsScreen,
     }
 
     
@@ -81,7 +83,7 @@ class CliceApp(App):
         self.push_screen("history")
     
     def action_settings(self) -> None:
-        self.notify("⚙️  SETTINGS — not yet implemented!", title="CLICE")
+        self.push_screen("settings")
 
 def run():
     trace("app_run")
@@ -103,3 +105,5 @@ TODO edge cases to check out for.
 - what happens when you close out in the middle of any screen
 - what happwns if you close out in the middle of transitions between screens 
 """
+
+# TODO history management must be real time. so if i finish a challenge and go back to the histroy and activity plan i should see it there...
