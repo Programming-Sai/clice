@@ -10,6 +10,7 @@ class AIFeedbackService:
         self.config = config or Config()
         self.api_key = self.config.openrouter_api_key
         self.model = self.config.openrouter_model
+        self.max_tokens = self.config.openrouter_max_tokens
     
     def generate_feedback(self, challenge: dict, session_log: dict, metrics: dict) -> str:
         """Generate AI feedback from challenge, session log, and metrics."""
@@ -185,7 +186,7 @@ Your feedback:"""
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 600,
+            "max_tokens": self.max_tokens,
             "temperature": 0.3,
         }
         
@@ -205,10 +206,12 @@ Your feedback:"""
         
         # Try different ways to extract content
         content = None
+        finish_reason = None
         
         # Method 1: OpenAI format
         if "choices" in data and len(data["choices"]) > 0:
             choice = data["choices"][0]
+            finish_reason = choice.get("finish_reason") or choice.get("native_finish_reason")
             if "message" in choice and "content" in choice["message"]:
                 content = choice["message"]["content"]
             elif "text" in choice:
@@ -217,7 +220,9 @@ Your feedback:"""
         # Method 2: OpenRouter specific
         if content is None and "data" in data:
             if "choices" in data["data"] and len(data["data"]["choices"]) > 0:
-                content = data["data"]["choices"][0].get("text", "")
+                inner_choice = data["data"]["choices"][0]
+                finish_reason = inner_choice.get("finish_reason")
+                content = inner_choice.get("text", "")
         
         # Method 3: Direct response field
         if content is None:
@@ -228,4 +233,19 @@ Your feedback:"""
             print(f"Full response: {json.dumps(data, indent=2)}")
             return ""
         
-        return content.strip()
+        content = content.strip()
+
+        # finish_reason == "length" means the model was still generating
+        # when it hit max_tokens - the text above is genuinely cut off
+        # mid-thought, not a complete (if terse) answer. Say so explicitly
+        # instead of silently handing back a truncated response that reads
+        # like it just stops for no reason.
+        if finish_reason == "length":
+            trace("ai_feedback_truncated", max_tokens=self.max_tokens)
+            content += (
+                f"\n\n_⚠ Response cut off — it hit the {self.max_tokens}-token "
+                f"limit before finishing. Raise \"AI max tokens\" in Settings "
+                f"for longer feedback._"
+            )
+
+        return content

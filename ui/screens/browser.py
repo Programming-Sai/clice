@@ -8,7 +8,7 @@ from textual.screen import Screen
 from textual.app import ComposeResult
 from textual.widgets import Static, ListView, Input, Markdown
 from textual.containers import Horizontal, Vertical
-from textual import on
+from textual import on, work
 from textual.binding import Binding
 import threading
 from ui.services.registry import RegistryService
@@ -67,22 +67,45 @@ class BrowserScreen(Screen):
 
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("browser")
-        
-        # Load challenges from registry
+        self.query_one("#search-input", Input).focus()
+        self._load_challenges()
+
+    @work(thread=True)
+    def _load_challenges(self) -> None:
+        """Fetch challenges off the main thread. This used to run directly
+        in on_mount, which meant the entire TUI - including input, the
+        loading overlay, everything - froze for however long the registry's
+        network round-trip took, on every single visit to this screen."""
+        overlay = self.query_one(LoadingOverlay)
+        self.app.call_from_thread(overlay.show, "Loading challenges...")
+
         config = Config()
         registry = RegistryService(config)
-        self.challenges = registry.get_challenges()
-        
+        try:
+            challenges = registry.get_challenges()
+        except Exception as e:
+            self.app.call_from_thread(self._on_load_error, e)
+            return
+
+        self.app.call_from_thread(self._apply_challenges, challenges)
+
+    def _apply_challenges(self, challenges: list) -> None:
+        self.challenges = challenges
+
         lv = self.query_one("#challenge-list", ListView)
         for ch in self.challenges:
             lv.append(ChallengeListItem(ch))
-        
+
         if self.challenges:
             first = lv.query(".challenge-item").first(ChallengeListItem)
             self._set_active(first)
             self.query_one("#detail-panel", DetailPanel).update_challenge(self.challenges[0])
-        
-        self.query_one("#search-input", Input).focus()
+
+        self.query_one(LoadingOverlay).hide()
+
+    def _on_load_error(self, error: Exception) -> None:
+        self.query_one(LoadingOverlay).hide()
+        self.app.notify(f"Failed to load challenges: {error}", title="Error", severity="error")
 
     def _set_active(self, item: ChallengeListItem | None) -> None:
         if self._active_item is not None:
@@ -292,5 +315,3 @@ class BrowserScreen(Screen):
     def _show_results_state(self) -> None:
         """Restore list panel."""
         self.query_one("#left-panel").display = True
-
-

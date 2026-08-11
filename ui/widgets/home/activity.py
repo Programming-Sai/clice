@@ -47,25 +47,38 @@ class ActivityPanel(Static):
             id="empty-state"
         )
         self.table = DataTable(show_cursor=True)
+        self._columns_added = False
         
         yield self.empty_state
         yield self.table
 
     def on_mount(self) -> None:
-        # Load from history service
+        self.refresh_sessions()
+
+    def refresh_sessions(self) -> None:
+        """(Re)load and display the most recent sessions. Safe to call
+        repeatedly - on_mount calls it once, and HomeScreen's refresh
+        (manual or via on_screen_resume) calls it again any time a
+        session may have just completed."""
         history = HistoryService()
         sessions = history.get_sessions()
-        
+
         if sessions:
             self.empty_state.display = False
             self.table.display = True
 
             table = self.table
-            table.add_column("TIMESTAMP", width=22)
-            table.add_column("CHALLENGE", width=20)
-            table.add_column("DURATION", width=12)
-            table.add_column("RESULT", width=10)
-            
+            if not self._columns_added:
+                # add_column is additive - only do this once, or repeated
+                # refreshes would duplicate the header columns.
+                table.add_column("TIMESTAMP", width=22)
+                table.add_column("CHALLENGE", width=20)
+                table.add_column("DURATION", width=12)
+                table.add_column("RESULT", width=10)
+                self._columns_added = True
+            else:
+                table.clear()
+
             for session in sessions[:5]:  # Show last 5
                 timestamp = session.get("started_at", "")[:16]
                 challenge = session.get("challenge_code", "Unknown")
@@ -82,4 +95,3 @@ class ActivityPanel(Static):
             self.table.display = False
 
         self.border_title = "03 / HISTORY"
-

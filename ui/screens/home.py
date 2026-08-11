@@ -1,5 +1,6 @@
 # ui/screens/home.py
 from pathlib import Path
+from textual import work
 from textual.screen import Screen
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
@@ -25,6 +26,10 @@ class HomeScreen(Screen):
         Binding("r", "refresh", "Refresh", show=True),
     ]
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._refresh_in_progress = False
+
     def compose(self):
         with Horizontal(id="header"):
             with Vertical(id="header-center"):
@@ -43,32 +48,56 @@ class HomeScreen(Screen):
         
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("home")
-        self._update_status()
+        self._start_refresh(force=False)
+
+    def on_screen_resume(self) -> None:
+        """Fires every time this screen becomes the active one again -
+        including when popped back to (e.g. finishing a challenge and
+        returning here), unlike on_mount which only ever fires once for
+        this cached screen instance. This is what makes a just-completed
+        session actually show up without requiring a manual [r] press."""
+        self._start_refresh(force=False)
 
     def action_refresh(self) -> None:
         """Refresh all status indicators (key: R)."""
-        self._update_status(force=True)
-        self.notify("Status refreshed", title="CLICE", timeout=1)
+        if self._refresh_in_progress:
+            self.notify("Already refreshing...", title="CLICE", timeout=1)
+            return
+        self._start_refresh(force=True)
 
-    def _update_status(self, force=False) -> None:
-        """Fetch all status data and update the ready panel."""
+    def _start_refresh(self, force: bool) -> None:
+        self._refresh_in_progress = True
+        self._do_refresh(force)
+
+    @work(thread=True)
+    def _do_refresh(self, force: bool) -> None:
+        """Fetch registry/docker status in the background - this used to
+        run synchronously on the main thread, which meant any network call
+        (registry fetch) froze the entire TUI until it finished."""
         config = Config()
         registry = RegistryService(config)
-        
-        # Get Docker status
-        docker_status = Utilities().get_docker_status()
-        
-        # Get Registry status – fetch if cache doesn't exist
+
+        docker_status = Utilities().get_docker_status(force=force)
+
         try:
-            # This ensures we have the registry cached
-            challenges = registry.get_challenges(force_refresh=force)  # ← Fetches if cache doesn't exist
+            challenges = registry.get_challenges(force_refresh=force)
             challenge_count = len(challenges)
-            
-            # Now check sync status
             registry_status = "SYNCED" if registry.is_synced() else "OUT OF SYNC"
-        except Exception as e:
+        except Exception:
             registry_status = "ERROR"
             challenge_count = 0
-        
-        # Update the ready panel
+
+        self.app.call_from_thread(
+            self._apply_refresh_results, docker_status, registry_status, challenge_count, force
+        )
+
+    def _apply_refresh_results(self, docker_status, registry_status, challenge_count, force) -> None:
         self.ready_panel.update_status(docker_status, registry_status, challenge_count)
+        # Wired to refresh everything on this screen, not just the ready
+        # panel - a completed session's result shows up here too now,
+        # whether this ran automatically (on_screen_resume) or manually ([r]).
+        self.query_one(ActivityPanel).refresh_sessions()
+
+        self._refresh_in_progress = False
+        if force:
+            self.notify("Status refreshed", title="CLICE", timeout=1)

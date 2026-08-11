@@ -1,15 +1,43 @@
+# ui/screens/settings.py
+"""
+SettingsScreen — live-wired settings editor
+=============================================
+Flat command grammar, typed against Config._SCHEMA:
 
-from textual.app import App, ComposeResult          # The main app "box"
-from textual.containers import Vertical, Horizontal  # Boxes to stack/line-up widgets
-from textual.widgets import Static, DataTable, Input  # Our LEGO bricks
+    set <key> <value>      e.g.  set resources.memory 1g
+    get <key>                reveal a value in full (unmasks the API key)
+    reset <key>              revert one field to its .env default
+    reset all                revert everything (asks for confirmation)
+    undo                     step back through the last change (repeatable)
+    help                     list every command and key you can use
+
+Typing shows an inline ghost-text suggestion for the rest of the command;
+Tab fills it in, Enter actually runs it - completing never submits by
+itself.
+
+All reads/writes go straight through the live Config instance, so nothing
+here is hardcoded sample data - the table always reflects what the rest of
+the app is actually using.
+"""
+
+import json
+import re
+
+from textual.app import ComposeResult
+from textual.containers import Vertical, Horizontal
+from textual.widgets import Static, DataTable, Input
 from textual.screen import Screen
 from textual.binding import Binding
+from textual.suggester import Suggester
+
 from ui.widgets.footer import Footer
+from ui.widgets.history.modal import ConfirmModal
+from ui.services.config import Config
 
 
 BRAND      = "#00e5cc"   # main teal  - borders, section headers, prompts
-ACCENT_OK  = "#4ade80"   # bright green - "everything is fine" status text
-ACCENT_ERR = "#ff4444"   # bright red   - "something's wrong" status text
+ACCENT_OK  = "#4ade80"   # bright green - success / "everything is fine"
+ACCENT_ERR = "#ff4444"   # bright red   - errors
 DIM_BORDER = "#1e3a3a"   # dark teal    - the color of most panel borders
 BG         = "#0a0a0a"   # near-black background, used across every screen
 DIM_TEXT   = "#888888"   # soft grey    - secondary/label text, hints
@@ -19,23 +47,13 @@ DIM_TEXT   = "#888888"   # soft grey    - secondary/label text, hints
 # Column widths - a design DECISION, not a measurement
 # ---------------------------------------------------------------------
 
-KEY_WIDTH = 20
-CURRENT_WIDTH = 20
-DEFAULT_WIDTH = 20
-DESCRIPTION_WIDTH = 26
+KEY_WIDTH = 22
+CURRENT_WIDTH = 22
+DEFAULT_WIDTH = 22
+DESCRIPTION_WIDTH = 30
 
-# DataTable puts a little breathing room on both sides of every
-# cell automatically (1 space left, 1 space right) - that's what
-# "CELL_PADDING" accounts for below.
 CELL_PADDING = 1
 COLUMN_WIDTHS = [KEY_WIDTH, CURRENT_WIDTH, DEFAULT_WIDTH, DESCRIPTION_WIDTH]
-
-# Now we can CALCULATE the table's total width from those cubby
-# sizes, instead of guessing or measuring it after the fact:
-#   - add up all the column cubbies
-#   - add each column's left+right breathing room
-#   - add 4 more: 2 for #table-box's left+right border line,
-#     and 2 for #table-box's own left+right padding (see APP_CSS)
 TABLE_WIDTH = (
     sum(COLUMN_WIDTHS)
     + (2 * CELL_PADDING * len(COLUMN_WIDTHS))
@@ -44,20 +62,102 @@ TABLE_WIDTH = (
 
 
 # ---------------------------------------------------------------------
-# STEP 1: The look of our app (the "paint and stickers")
+# FIELDS - the single source of truth for what this screen shows.
+# (display key, Config attribute, human description)
+# The display key is what the user types in `set`/`get`/`reset`;
+# the Config attribute is what actually gets read/written.
 # ---------------------------------------------------------------------
 
+FIELDS = [
+    ("resources.memory",         "challenge_mem_limit",   "Max memory allocation (e.g. 512m, 1g)"),
+    ("resources.cpu_cores",      "challenge_cpu_cores",   "CPU cores allocated per challenge"),
+    ("resources.checker_timeout","checker_timeout",       "Checker script timeout (seconds)"),
+    ("resources.docker_timeout", "docker_timeout",        "Docker container startup timeout (seconds)"),
+    ("behaviour.network",        "network_enabled",       "Allow network access inside challenges"),
+    ("behaviour.auto_cleanup",   "auto_cleanup",           "Auto-remove containers after a session"),
+    ("ai.model",                 "openrouter_model",       "AI model used for verdict feedback"),
+    ("ai.api_key",               "openrouter_api_key",     "OpenRouter API key (masked - use `get` to reveal)"),
+    ("ai.max_tokens",            "openrouter_max_tokens",  "Max length of AI feedback responses"),
+]
+
+_KEY_TO_ATTR = {key: attr for key, attr, _ in FIELDS}
+_ATTR_TO_KEY = {attr: key for key, attr, _ in FIELDS}
+
+_BOOL_TRUE = {"1", "true", "yes", "on", "enabled"}
+_BOOL_FALSE = {"0", "false", "no", "off", "disabled"}
+
+_VERBS = ("set", "get", "reset", "undo", "help")
+
+# Sentinel meaning "this attribute had no override at all" (i.e. it was
+# sitting at its .env default) - distinct from any real stored value.
+_UNSET = object()
+
+_HELP_TEXT = (
+    "Commands:\n"
+    "  set <key> <value>   change a setting, e.g. set resources.memory 1g\n"
+    "  get <key>           reveal a value in full (unmasks the API key)\n"
+    "  reset <key>         revert one setting to its default\n"
+    "  reset all           revert every setting (asks to confirm)\n"
+    "  undo                step back through your last change\n\n"
+    "Keys:\n"
+    + "\n".join(f"  {key}" for key, _, _ in FIELDS)
+)
+
+
+class CommandSuggester(Suggester):
+    """Ghost-text completion for the settings command line.
+
+    Suggests the rest of the verb, then the rest of the key, then (for
+    boolean fields only) the rest of the value - always as a full-value
+    completion, since that's what Input's suggester protocol expects.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(use_cache=False, case_sensitive=False)
+
+    async def get_suggestion(self, value: str) -> str | None:
+        if not value:
+            return None
+        parts = value.split(" ")
+
+        # Completing the verb itself (no space typed yet).
+        if len(parts) == 1:
+            partial = parts[0].lower()
+            for word in _VERBS:
+                if word.startswith(partial) and word != partial:
+                    return word
+            return None
+
+        verb = parts[0].lower()
+
+        # Completing the key (second token).
+        if len(parts) == 2 and verb in ("set", "get", "reset"):
+            pool = [key for key, _, _ in FIELDS] + (["all"] if verb == "reset" else [])
+            partial = parts[1].lower()
+            for key in pool:
+                if key.startswith(partial) and key != partial:
+                    return f"{verb} {key}"
+            return None
+
+        # Completing a boolean value (third token) for `set`.
+        if len(parts) == 3 and verb == "set":
+            key = parts[1].lower()
+            attr = _KEY_TO_ATTR.get(key)
+            if attr and Config._SCHEMA[attr][1] is bool:
+                partial = parts[2].lower()
+                for word in ("on", "off"):
+                    if word.startswith(partial) and word != partial:
+                        return f"{verb} {key} {word}"
+            return None
+
+        return None
+
+
 APP_CSS = f"""
-
-
-/* A wrapper that hugs the table's real width (instead of stretching
-   all the way across the screen), so we can then center that whole
-   little bundle on the page. */
 #content-wrap {{
     width: auto;
     height: auto;
 }}
-
 
 #table-box {{
     border: tall {DIM_BORDER};
@@ -67,15 +167,12 @@ APP_CSS = f"""
     height: auto;
 }}
 
-/* The settings table itself - fills 100% of #table-box's inside,
-   rather than "auto"-sizing itself to its own content. */
 #config-table {{
     background: {BG};
     color: {DIM_TEXT};
     width: 100%;
     height: auto;
 }}
-
 
 DataTable > .datatable--header {{
     color: {DIM_TEXT};
@@ -88,18 +185,14 @@ DataTable > .datatable--cursor {{
     color: {BG};
 }}
 
-
 #command-box {{
     border: tall {DIM_BORDER};
     background: {BG};
-    margin: 0 0 1 0;
+    margin: 0 0 0 0;
     height: 3;
     align: left middle;
-    /* Matches #table-box's width on purpose - see the TABLE_WIDTH
-       comment near the top of this file for why. */
     width: {TABLE_WIDTH};
 }}
-
 
 #prompt-symbol {{
     color: {BRAND};
@@ -108,7 +201,6 @@ DataTable > .datatable--cursor {{
     padding: 0 0 0 1;
 }}
 
-/* The actual text input where the user types */
 #command-input {{
     background: {BG};
     border: none;
@@ -118,10 +210,22 @@ DataTable > .datatable--cursor {{
     border: none;
 }}
 
+#status-line {{
+    width: {TABLE_WIDTH};
+    height: auto;
+    margin: 0 0 1 0;
+    padding: 0 1;
+    color: {DIM_TEXT};
+}}
 
+#status-line.-error {{
+    color: {ACCENT_ERR};
+}}
 
-/* Push everything above the footer to the top of the screen, and
-   center our little "content-wrap" bundle left-to-right. */
+#status-line.-ok {{
+    color: {ACCENT_OK};
+}}
+
 #body {{
     height: 1fr;
     align: center top;
@@ -130,126 +234,64 @@ DataTable > .datatable--cursor {{
 
 
 class SettingsScreen(Screen):
-    """
-    This is our whole app! Every Textual app is a Python "class"
-    that inherits from App - think of App as a pre-built empty
-    toy box, and we're the ones filling it with our own toys.
-    """
+    """Live settings editor, backed directly by Config."""
 
-    # Attach the CSS "paint" we wrote above to this app.
     CSS = APP_CSS
-
-    settings={
-        "resources":{
-            "memory":{
-                "current":"512m",
-                "default":"1g",
-                "description":"Max memory allocation",
-            },
-            "cpu_cores":{
-                "current":"1.0",
-                "default":"1.0",
-                "description": "CPU cores allocated",
-            },
-            "timeout":{
-                "current":"20s",
-                "default":"30s",
-                "description": "Checker timeout limit",
-            }
-        },
-        "behaviour":{
-            "network":{
-                "current":"ENABLED",
-                "default":"DISABLED",
-                "description":"Allow network access",
-            },
-            "auto_clean":{
-                "current":"ENABLED",
-                "default":"ENABLED",
-                "description":"Auto-cleanup containers",
-            }
-        },
-        "ai":{
-            "model":{
-                "current":"nvidia/nemotron-3-ultra-550b-a55b:free",
-                "default":"nvidia/nemotron-3-ultra-550b-a55b:free",
-                "description":"Ai model for feedback"
-            },
-            "api_key":{
-                "current":"sk-or-v1-***",
-                "default":"...",
-                "description":"Api key for Ai feedback"
-            }
-        }
-    }
-
-    # This is the pretend data for our settings table - a list of
-    # rows, and each row is a small list of 4 pieces of info:
-    # [ KEY, CURRENT VALUE, DEFAULT VALUE, DESCRIPTION ]
-    # In a real app you might load this from a file or a program,
-    # but for our starting point we just type it in by hand.
-
-    ROWS = []
-    for k, v in settings.items():
-        for sk, sv in v.items():
-            ROWS.append((k+"."+sk, sv["current"], sv["default"], sv["description"]))
 
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Back", show=True),
+        Binding("tab", "accept_suggestion", "Complete", show=False, priority=True),
+        Binding("up", "history_prev", "Prev cmd", show=False, priority=True),
+        Binding("down", "history_next", "Next cmd", show=False, priority=True),
     ]
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.config = Config()
+        # Stack of (label, snapshot) - snapshot maps attr -> its prior
+        # override value (or _UNSET if it had none) at the moment right
+        # before that change was applied. Popping and re-applying the
+        # snapshot is the whole undo mechanism.
+        self._undo_stack: list[tuple[str, dict]] = []
+        # Shell-style command recall: the commands actually submitted, most
+        # recent last. _history_index is None while not browsing; while
+        # browsing, _history_draft holds whatever was being typed before
+        # the first Up press, so Down can return to it past the newest entry.
+        self._command_history: list[str] = []
+        self._history_index: int | None = None
+        self._history_draft: str = ""
+
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        # History recall should only hijack Up/Down while the command input
+        # itself is focused - otherwise it would swallow the arrow keys the
+        # DataTable needs for its own cursor navigation.
+        if action in ("history_prev", "history_next"):
+            command_input = self.query_one("#command-input", Input)
+            if self.focused is not command_input:
+                return False
+        return True
+
+    # ── Compose / mount ───────────────────────────────────────────────────
+
     def compose(self) -> ComposeResult:
-        """
-        `compose` is where we say "here are all my LEGO bricks and
-        here is the order I want to snap them together in."
-        Textual calls this automatically when the app starts.
-        `yield` just means "add this brick to the screen now."
-        """
-
-        # A Vertical box stacks its children top-to-bottom, like
-        # stacking pancakes. Because #body has "align: center top"
-        # in the CSS, whatever we put inside it will sit in the
-        # middle of the screen sideways.
         with Vertical(id="body"):
-
-
-            # "content-wrap" is a small bundle that only takes up as
-            # much room as its widest child (the table) needs -
-            # that's what lets the whole group shrink-to-fit AND
-            # get centered together as one unit.
             with Vertical(id="content-wrap"):
-
-                # 2) A bordered box containing our settings table.
                 with Vertical(id="table-box"):
                     yield DataTable(id="config-table", cursor_type="cell")
 
-                # 3) The command input box, styled like "/ > type here".
-                #    We put the "/" symbol and the actual Input side
-                #    by side using a Horizontal box (left-to-right).
                 with Horizontal(id="command-box"):
                     yield Static(">", id="prompt-symbol")
                     yield Input(
-                        placeholder="set resource.memory 1024",
+                        placeholder="set resources.memory 1g  (try `help`)",
                         id="command-input",
+                        suggester=CommandSuggester(),
                     )
 
+                yield Static("", id="status-line")
 
         yield Footer()
 
-
     def on_mount(self) -> None:
-        """
-        `on_mount` runs one time, right after the app has finished
-        building itself - like the moment right after you finish
-        building a LEGO set and it's ready to play with.
-
-        We use it here to fill in our DataTable with columns and
-        rows, and to move the little cursor highlight onto the
-        "512 MB" cell, just like the picture shows.
-        """
-
-        # Grab the table LEGO brick by the id we gave it, so we can
-        # tell it what to show.
         self.query_one(Footer).set_screen("settings")
         table = self.query_one("#config-table", DataTable)
 
@@ -257,35 +299,275 @@ class SettingsScreen(Screen):
         table.add_column("CURRENT", width=CURRENT_WIDTH)
         table.add_column("DEFAULT", width=DEFAULT_WIDTH)
         table.add_column("DESCRIPTION", width=DESCRIPTION_WIDTH)
-
-
-        for row in self.ROWS:
-            table.add_row(*row, height=None)
-
-        # Turn off the little numbered "row label" column on the far
-        # left that Textual shows by default - the picture doesn't
-        # have one.
         table.show_row_labels = False
 
-        # Move the highlighted cell to row 0 ("resource.memory"),
-        # column 1 (the "CURRENT" column) - this matches the cyan
-        # highlighted "512 MB" box in the picture.
-        table.cursor_coordinate = (0, 1)
+        self._populate_table()
 
-        # Put the typing cursor straight into the command input box,
-        # so the user can start typing immediately, no clicking
-        # needed.
+        table.cursor_coordinate = (0, 1)
         self.query_one("#command-input", Input).focus()
 
-    def get_css_variables(self) -> dict[str, str]:
-        """
-        Textual calls this before it reads our CSS, to ask "hey, do
-        you have any custom $variables I should know about?" We hand
-        back our TABLE_WIDTH number here, turning it into the
-        "$table-width" variable used up in APP_CSS.
-        """
-        variables = super().get_css_variables()
-        variables["table-width"] = str(TABLE_WIDTH)
-        return variables
+    # ── Table population ────────────────────────────────────────────────
 
+    def _display_value(self, attr: str, value) -> str:
+        if attr == "openrouter_api_key":
+            if not value:
+                return "(not set)"
+            return f"***{value[-4:]}" if len(value) >= 4 else "***"
+        if isinstance(value, bool):
+            return "ENABLED" if value else "DISABLED"
+        return str(value)
 
+    def _populate_table(self) -> None:
+        """(Re)build every row from the live Config instance."""
+        table = self.query_one("#config-table", DataTable)
+        table.clear()
+        for key, attr, description in FIELDS:
+            current = self._display_value(attr, getattr(self.config, attr))
+            default = self._display_value(attr, self.config._env_defaults.get(attr))
+            table.add_row(key, current, default, description, key=key)
+
+    def _refresh_row(self, key: str) -> None:
+        """Update just one row in place, keeping cursor position sane."""
+        table = self.query_one("#config-table", DataTable)
+        attr = _KEY_TO_ATTR[key]
+        current = self._display_value(attr, getattr(self.config, attr))
+        default = self._display_value(attr, self.config._env_defaults.get(attr))
+        # DataTable.update_cell wants column keys, not labels - columns were
+        # added in KEY/CURRENT/DEFAULT/DESCRIPTION order, so index 1 is
+        # CURRENT and index 2 is DEFAULT.
+        table.update_cell(key, table.ordered_columns[1].key, current)
+        table.update_cell(key, table.ordered_columns[2].key, default)
+
+    # ── Status line ──────────────────────────────────────────────────────
+
+    def _set_status(self, message: str, kind: str = "info") -> None:
+        status = self.query_one("#status-line", Static)
+        status.remove_class("-error", "-ok")
+        if kind == "error":
+            status.add_class("-error")
+        elif kind == "ok":
+            status.add_class("-ok")
+        status.update(message)
+
+    # ── Command input ────────────────────────────────────────────────────
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "command-input":
+            return
+        raw = event.value.strip()
+        event.input.value = ""
+        self._history_index = None
+        if raw:
+            # Skip recording an exact back-to-back repeat, same as a shell.
+            if not self._command_history or self._command_history[-1] != raw:
+                self._command_history.append(raw)
+            self._handle_command(raw)
+
+    def _handle_command(self, raw: str) -> None:
+        parts = raw.split(maxsplit=2)
+        cmd = parts[0].lower()
+
+        if cmd == "set" and len(parts) == 3:
+            self._cmd_set(parts[1], parts[2])
+        elif cmd == "get" and len(parts) == 2:
+            self._cmd_get(parts[1])
+        elif cmd == "reset" and len(parts) == 2:
+            self._cmd_reset(parts[1])
+        elif cmd == "undo" and len(parts) == 1:
+            self._cmd_undo()
+        elif cmd == "help" and len(parts) == 1:
+            self._cmd_help()
+        else:
+            self._set_status(
+                f"Unrecognized command: '{raw}'. Type `help` to see everything you can type.",
+                kind="error",
+            )
+
+    # ── Undo snapshotting ────────────────────────────────────────────────
+
+    def _read_overrides(self) -> dict:
+        path = self.config.settings_path
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+    def _snapshot(self, attrs) -> dict:
+        """Capture the current override state (or _UNSET) for each attr,
+        right before it's about to change."""
+        overrides = self._read_overrides()
+        return {attr: overrides.get(attr, _UNSET) for attr in attrs}
+
+    def _push_undo(self, label: str, snapshot: dict) -> None:
+        self._undo_stack.append((label, snapshot))
+
+    # ── set ──────────────────────────────────────────────────────────────
+
+    def _cmd_set(self, key: str, raw_value: str) -> None:
+        key = key.lower()
+        attr = _KEY_TO_ATTR.get(key)
+        if attr is None:
+            self._set_status(f"Unknown setting '{key}'. Type `help` for the full list.", kind="error")
+            return
+
+        try:
+            value = self._cast_and_validate(attr, raw_value)
+        except ValueError as e:
+            self._set_status(f"Invalid value for '{key}': {e}", kind="error")
+            return
+
+        self._push_undo(f"set {key}", self._snapshot([attr]))
+        self.config.save(**{attr: value})
+        self._refresh_row(key)
+        self._set_status(f"Saved {key} = {self._display_value(attr, value)}", kind="ok")
+
+    def _cast_and_validate(self, attr: str, raw_value: str):
+        _, cast = Config._SCHEMA[attr]
+        raw_value = raw_value.strip()
+
+        if not raw_value:
+            raise ValueError("value can't be empty")
+
+        if cast is bool:
+            low = raw_value.lower()
+            if low in _BOOL_TRUE:
+                return True
+            if low in _BOOL_FALSE:
+                return False
+            raise ValueError("expected on/off, true/false, or yes/no")
+
+        if cast is int:
+            try:
+                value = int(raw_value)
+            except ValueError:
+                raise ValueError("expected a whole number")
+        elif cast is float:
+            try:
+                value = float(raw_value)
+            except ValueError:
+                raise ValueError("expected a number")
+        else:
+            value = raw_value
+
+        # Field-specific sanity ranges - reject nonsense before it ever
+        # reaches Config.save() / the containers that read these values.
+        if attr == "challenge_cpu_cores" and value <= 0:
+            raise ValueError("must be greater than 0")
+        if attr in ("checker_timeout", "docker_timeout") and value <= 0:
+            raise ValueError("must be greater than 0 seconds")
+        if attr == "openrouter_max_tokens" and not (50 <= value <= 4000):
+            raise ValueError("must be between 50 and 4000")
+        if attr == "challenge_mem_limit":
+            if not re.fullmatch(r"\d+[mMgG]", value):
+                raise ValueError("expected a format like 512m or 1g")
+
+        return value
+
+    # ── reset ────────────────────────────────────────────────────────────
+
+    def _cmd_reset(self, key: str) -> None:
+        key = key.lower()
+
+        if key == "all":
+            def handle_answer(confirmed: bool | None) -> None:
+                if confirmed:
+                    all_attrs = [attr for _, attr, _ in FIELDS]
+                    self._push_undo("reset all", self._snapshot(all_attrs))
+                    self.config.reset()
+                    self._populate_table()
+                    self._set_status("All settings reset to defaults", kind="ok")
+
+            self.app.push_screen(
+                ConfirmModal("Reset ALL settings to their defaults? This can't be undone (but `undo` will still work)."),
+                handle_answer,
+            )
+            return
+
+        attr = _KEY_TO_ATTR.get(key)
+        if attr is None:
+            self._set_status(f"Unknown setting '{key}'.", kind="error")
+            return
+
+        self._push_undo(f"reset {key}", self._snapshot([attr]))
+        self.config.reset(attr)
+        self._refresh_row(key)
+        self._set_status(f"Reset {key} to default", kind="ok")
+
+    # ── undo ─────────────────────────────────────────────────────────────
+
+    def _cmd_undo(self) -> None:
+        if not self._undo_stack:
+            self._set_status("Nothing to undo", kind="error")
+            return
+
+        label, snapshot = self._undo_stack.pop()
+        for attr, prior in snapshot.items():
+            if prior is _UNSET:
+                self.config.reset(attr)
+            else:
+                self.config.save(**{attr: prior})
+
+        if len(snapshot) == len(FIELDS):
+            self._populate_table()
+        else:
+            for attr in snapshot:
+                self._refresh_row(_ATTR_TO_KEY[attr])
+
+        self._set_status(f"Undid: {label}", kind="ok")
+
+    # ── get (reveal a value in full) ────────────────────────────────────
+
+    def _cmd_get(self, key: str) -> None:
+        key = key.lower()
+        attr = _KEY_TO_ATTR.get(key)
+        if attr is None:
+            self._set_status(f"Unknown setting '{key}'.", kind="error")
+            return
+
+        value = getattr(self.config, attr)
+        display = value if value not in (None, "") else "(not set)"
+        self.notify(f"{key} = {display}", title="CLICE", timeout=6)
+        self._set_status(f"Revealed {key} above (dismiss the notification to hide it again)")
+
+    # ── help ─────────────────────────────────────────────────────────────
+
+    def _cmd_help(self) -> None:
+        self.notify(_HELP_TEXT, title="Settings help", timeout=12)
+        self._set_status("Help shown above")
+
+    # ── ghost-text autocomplete ─────────────────────────────────────────
+
+    def action_accept_suggestion(self) -> None:
+        command_input = self.query_one("#command-input", Input)
+        if self.focused is command_input and command_input._suggestion:
+            command_input.action_cursor_right()
+        else:
+            self.focus_next()
+
+    # ── command history recall (Up/Down, like a shell) ─────────────────
+
+    def action_history_prev(self) -> None:
+        command_input = self.query_one("#command-input", Input)
+        if not self._command_history:
+            return
+        if self._history_index is None:
+            self._history_draft = command_input.value
+            self._history_index = len(self._command_history) - 1
+        elif self._history_index > 0:
+            self._history_index -= 1
+        command_input.value = self._command_history[self._history_index]
+        command_input.action_end()
+
+    def action_history_next(self) -> None:
+        command_input = self.query_one("#command-input", Input)
+        if self._history_index is None:
+            return
+        if self._history_index < len(self._command_history) - 1:
+            self._history_index += 1
+            command_input.value = self._command_history[self._history_index]
+        else:
+            self._history_index = None
+            command_input.value = self._history_draft
+        command_input.action_end()

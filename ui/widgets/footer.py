@@ -33,6 +33,7 @@ class Footer(Static):
         "verdict": [
             ("Enter", "BACK"),
             ("H", "HISTORY"),
+            ("R", "REFRESH"),
             ("Q", "QUIT"),
         ],
         "history": [

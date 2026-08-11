@@ -74,6 +74,15 @@ class HistoryScreen(Screen):
 
         self.refresh_table()
 
+    def on_screen_resume(self) -> None:
+        """Fires every time this cached screen becomes active again (e.g.
+        popped back to after finishing a challenge), unlike on_mount which
+        only fires once. Re-reads from disk so a just-completed session
+        actually shows up without needing a fresh screen instance."""
+        self._load_sessions()
+        self.refresh_table()
+        self.update_stats()
+
     def _load_sessions(self) -> None:
         """Load sessions from HistoryService."""
         self._sessions = self.history.get_sessions() 
@@ -267,6 +276,3 @@ class HistoryScreen(Screen):
         }
 
         self.app.push_screen(VerdictScreen(challenge, full_log, session_id))
-
-
-

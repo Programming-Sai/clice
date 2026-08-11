@@ -223,9 +223,20 @@ class SearchBar(Horizontal):
                 if not value.search(str(session_value)):
                     return False
             elif operator == "=":
-                # Special handling for status (case-insensitive)
+                # Special handling for status (case-insensitive exact match -
+                # "PASS" shouldn't match a session whose status merely
+                # contains "pass" as a substring of something else).
                 if field == "status":
                     if str(session_value).upper() != str(value).upper():
+                        return False
+                # Text fields use substring/contains matching, matching how
+                # the regex and bare-word paths already behave - title:hello
+                # should match "Hello CLICE Challenge" the same way a bare
+                # "hello" search would, not require the whole title to be
+                # exactly "hello". Numeric/other fields keep exact matching,
+                # since exact comparison is what those actually mean.
+                elif field in ("title", "challenge", "code"):
+                    if str(value).lower() not in str(session_value).lower():
                         return False
                 else:
                     if str(session_value).lower() != str(value).lower():

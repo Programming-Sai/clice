@@ -16,6 +16,7 @@ from textual.containers import Horizontal, Vertical, ScrollableContainer
 
 from engine.evaluator import evaluate
 from ui.services.ai_feedback import AIFeedbackService
+from logger.debug import trace
 from ui.widgets.footer import Footer
 from ui.widgets.utils.design import (
     BRAND, ACCENT_OK, DIM_BRAND, BG, TEXT
@@ -149,6 +150,8 @@ class VerdictScreen(Screen):
         ("q", "quit", "Quit"),
         ("enter", "return_back", "Back"),
         Binding("escape", "app.pop_screen", "Back", show=True),
+        ("h", "view_history", "View History"),
+        Binding("r", "retry_feedback", "Retry AI Feedback", show=True),
     ]
 
     def __init__(self, challenge: dict, session_log: dict = None, session_id: str = None, **kwargs):
@@ -169,6 +172,7 @@ class VerdictScreen(Screen):
             self.verdict_state = "fail"
         self.timeline_rows = self._build_timeline()
         self.ai_feedback_loaded = False
+        self._feedback_in_progress = False
         self.metrics = {}
 
     def _build_timeline(self):
@@ -226,14 +230,32 @@ class VerdictScreen(Screen):
     @work(thread=True)
     def _fetch_ai_feedback(self) -> None:
         """Fetch AI feedback in the background."""
+        self._feedback_in_progress = True
         try:
             service = AIFeedbackService()
             feedback = service.generate_feedback(self.challenge, self.session_log, self.metrics)
-            
-            # Update the AI feedback widget
             self.app.call_from_thread(self._update_ai_feedback, feedback)
         except Exception as e:
-            self.app.call_from_thread(self._update_ai_feedback, f"_AI feedback error: {e}_")
+            # generate_feedback() already catches everything internally and
+            # returns a clean message in every case - this is a last-resort
+            # net for something failing before that point (e.g. constructing
+            # AIFeedbackService itself), so it stays generic on purpose.
+            trace("verdict_feedback_fetch_unexpected_error", error=str(e), error_type=type(e).__name__)
+            self.app.call_from_thread(
+                self._update_ai_feedback,
+                "_AI feedback failed unexpectedly - press [r] to retry_",
+            )
+        finally:
+            self._feedback_in_progress = False
+
+    def action_retry_feedback(self) -> None:
+        """Manually re-trigger an AI feedback fetch (e.g. after a network
+        failure exhausted the automatic retries)."""
+        if self._feedback_in_progress:
+            self.notify("Already fetching feedback...", title="CLICE", timeout=1)
+            return
+        self.query_one("#verdict-md").update("_Retrying AI feedback..._")
+        self._fetch_ai_feedback()
 
     def _update_ai_feedback(self, feedback: str) -> None:
         """Update the AI feedback widget."""

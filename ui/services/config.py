@@ -29,6 +29,7 @@ class Config:
         "auto_cleanup":        ("CLICE_AUTO_CLEANUP", bool),
         "openrouter_api_key":  ("OPENROUTER_API_KEY", str),
         "openrouter_model":    ("OPENROUTER_MODEL", str),
+        "openrouter_max_tokens": ("OPENROUTER_MAX_TOKENS", int),
     }
 
     def __init__(self):
@@ -73,6 +74,12 @@ class Config:
         self.auto_cleanup = self._to_bool(os.getenv("CLICE_AUTO_CLEANUP", "true"))
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY", "")
         self.openrouter_model = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
+        self.openrouter_max_tokens = int(os.getenv("OPENROUTER_MAX_TOKENS", "800"))
+
+        # Snapshot of the .env-derived (factory) values, captured before user
+        # overrides are layered on - this is what the settings screen shows
+        # in its "DEFAULT" column and what `reset` reverts a field to.
+        self._env_defaults = {attr: getattr(self, attr) for attr in self._SCHEMA}
 
         # ── Layer user overrides from settings.json on top, if present ──
         self._apply_settings_file()
@@ -124,6 +131,7 @@ class Config:
     CLICE_AUTO_CLEANUP=true
     OPENROUTER_API_KEY=
     OPENROUTER_MODEL=
+    OPENROUTER_MAX_TOKENS=800
     """)
 
     def save(self, **updates):
