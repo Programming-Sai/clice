@@ -6,6 +6,17 @@ on:
       - "v*"
   workflow_dispatch:
 
+# NOTE on the ubuntu-22.04 pin above: PyInstaller dynamically links against
+# whatever glibc is present on the build machine, and glibc is only
+# forward-compatible (a binary built on newer glibc won't run on older
+# systems, but the reverse works fine). ubuntu-latest currently means
+# Ubuntu 24.04 (glibc 2.38+), which breaks anyone still on 22.04 or older -
+# pinning to 22.04 (glibc 2.35) produces a binary that runs everywhere 22.04
+# does *and* everywhere newer. GitHub has begun deprecating the ubuntu-22.04
+# runner label itself (targeted full removal ~April 2027) - that only
+# affects future CI runs on this label, not binaries already built and
+# released, but this pin will need revisiting before then.
+
 permissions:
   contents: write
 
@@ -15,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04 # pinned, not ubuntu-latest - see note below
             asset_name: clice-linux-x86_64
           - os: macos-13 # Intel
             asset_name: clice-macos-x86_64
