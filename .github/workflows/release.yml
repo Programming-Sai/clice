@@ -46,23 +46,7 @@ jobs:
           pip install "textual>=8.0" "rich>=13.0" "docker>=7.0" "pexpect>=4.9" "requests>=2.31" "python-dotenv>=1.0"
 
       - name: Build onedir bundle
-        run: |
-          pyinstaller --onedir --name clice \
-            --collect-all textual \
-            --collect-submodules rich \
-            --collect-data pexpect \
-            --exclude-module numpy \
-            --exclude-module PIL \
-            --exclude-module yaml \
-            --exclude-module matplotlib \
-            --exclude-module scipy \
-            --exclude-module pandas \
-            --exclude-module tkinter \
-            --exclude-module unittest \
-            --exclude-module test \
-            --exclude-module cryptography \
-            --strip \
-            clice.py
+        run: pyinstaller clice.spec
 
       - name: Package as tarball
         run: |
