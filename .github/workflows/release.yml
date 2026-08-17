@@ -1,0 +1,64 @@
+name: Build and Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: clice-linux-x86_64
+          - os: macos-13 # Intel
+            asset_name: clice-macos-x86_64
+          - os: macos-latest # Apple Silicon
+            asset_name: clice-macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build + runtime dependencies
+        run: |
+          pip install pyinstaller
+          pip install "textual>=8.0" "rich>=13.0" "docker>=7.0" "pexpect>=4.9" "requests>=2.31" "python-dotenv>=1.0"
+
+      - name: Build onedir bundle
+        run: |
+          pyinstaller --onedir --name clice \
+            --collect-all textual \
+            --collect-submodules rich \
+            --collect-data pexpect \
+            --exclude-module numpy \
+            --exclude-module PIL \
+            --exclude-module yaml \
+            --exclude-module matplotlib \
+            --exclude-module scipy \
+            --exclude-module pandas \
+            --exclude-module tkinter \
+            --exclude-module unittest \
+            --exclude-module test \
+            --exclude-module cryptography \
+            --strip \
+            clice.py
+
+      - name: Package as tarball
+        run: |
+          cd dist
+          tar czf ../${{ matrix.asset_name }}.tar.gz clice
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset_name }}.tar.gz

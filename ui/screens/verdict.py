@@ -254,14 +254,25 @@ class VerdictScreen(Screen):
         if self._feedback_in_progress:
             self.notify("Already fetching feedback...", title="CLICE", timeout=1)
             return
+        if self not in self.app.screen_stack:
+            return  # screen's gone, nothing to update
         self.query_one("#verdict-md").update("_Retrying AI feedback..._")
         self._fetch_ai_feedback()
 
     def _update_ai_feedback(self, feedback: str) -> None:
         """Update the AI feedback widget."""
-        # Clear the loading state and set feedback
-        self.query_one("#verdict-md").update(feedback)
-        self.ai_feedback_loaded = True
+        # If the user navigated away (e.g. pressed Enter/Escape to go back)
+        # while this fetch was still running in the background, this screen
+        # instance has already been popped and destroyed - querying its
+        # widgets would raise NoMatches. Skip the UI update in that case,
+        # but still persist the feedback below so it's there if they view
+        # this session again later via history.
+        still_active = self in self.app.screen_stack
+        if still_active:
+            self.query_one("#verdict-md").update(feedback)
+            self.ai_feedback_loaded = True
+        else:
+            trace("verdict_feedback_after_navigate_away", session_id=self.session_id)
 
         if self.session_id:            
             history = HistoryService()

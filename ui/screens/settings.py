@@ -21,7 +21,6 @@ the app is actually using.
 """
 
 import json
-import re
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, Horizontal
@@ -33,6 +32,16 @@ from textual.suggester import Suggester
 from ui.widgets.footer import Footer
 from ui.widgets.history.modal import ConfirmModal
 from ui.services.config import Config
+from ui.services.settings_schema import (
+    FIELDS,
+    KEY_TO_ATTR as _KEY_TO_ATTR,
+    ATTR_TO_KEY as _ATTR_TO_KEY,
+    BOOL_TRUE as _BOOL_TRUE,
+    BOOL_FALSE as _BOOL_FALSE,
+    UNSET as _UNSET,
+    cast_and_validate,
+    display_value as _shared_display_value,
+)
 
 
 BRAND      = "#00e5cc"   # main teal  - borders, section headers, prompts
@@ -67,30 +76,11 @@ TABLE_WIDTH = (
 # The display key is what the user types in `set`/`get`/`reset`;
 # the Config attribute is what actually gets read/written.
 # ---------------------------------------------------------------------
-
-FIELDS = [
-    ("resources.memory",         "challenge_mem_limit",   "Max memory allocation (e.g. 512m, 1g)"),
-    ("resources.cpu_cores",      "challenge_cpu_cores",   "CPU cores allocated per challenge"),
-    ("resources.checker_timeout","checker_timeout",       "Checker script timeout (seconds)"),
-    ("resources.docker_timeout", "docker_timeout",        "Docker container startup timeout (seconds)"),
-    ("behaviour.network",        "network_enabled",       "Allow network access inside challenges"),
-    ("behaviour.auto_cleanup",   "auto_cleanup",           "Auto-remove containers after a session"),
-    ("ai.model",                 "openrouter_model",       "AI model used for verdict feedback"),
-    ("ai.api_key",               "openrouter_api_key",     "OpenRouter API key (masked - use `get` to reveal)"),
-    ("ai.max_tokens",            "openrouter_max_tokens",  "Max length of AI feedback responses"),
-]
-
-_KEY_TO_ATTR = {key: attr for key, attr, _ in FIELDS}
-_ATTR_TO_KEY = {attr: key for key, attr, _ in FIELDS}
-
-_BOOL_TRUE = {"1", "true", "yes", "on", "enabled"}
-_BOOL_FALSE = {"0", "false", "no", "off", "disabled"}
+# FIELDS, _KEY_TO_ATTR, _ATTR_TO_KEY, _BOOL_TRUE, _BOOL_FALSE, _UNSET now
+# live in ui/services/settings_schema.py, shared with the CLI's
+# `clice set`/`get`/`reset` commands so both stay in sync automatically.
 
 _VERBS = ("set", "get", "reset", "undo", "help")
-
-# Sentinel meaning "this attribute had no override at all" (i.e. it was
-# sitting at its .env default) - distinct from any real stored value.
-_UNSET = object()
 
 _HELP_TEXT = (
     "Commands:\n"
@@ -309,13 +299,7 @@ class SettingsScreen(Screen):
     # ── Table population ────────────────────────────────────────────────
 
     def _display_value(self, attr: str, value) -> str:
-        if attr == "openrouter_api_key":
-            if not value:
-                return "(not set)"
-            return f"***{value[-4:]}" if len(value) >= 4 else "***"
-        if isinstance(value, bool):
-            return "ENABLED" if value else "DISABLED"
-        return str(value)
+        return _shared_display_value(attr, value)
 
     def _populate_table(self) -> None:
         """(Re)build every row from the live Config instance."""
@@ -424,46 +408,7 @@ class SettingsScreen(Screen):
         self._set_status(f"Saved {key} = {self._display_value(attr, value)}", kind="ok")
 
     def _cast_and_validate(self, attr: str, raw_value: str):
-        _, cast = Config._SCHEMA[attr]
-        raw_value = raw_value.strip()
-
-        if not raw_value:
-            raise ValueError("value can't be empty")
-
-        if cast is bool:
-            low = raw_value.lower()
-            if low in _BOOL_TRUE:
-                return True
-            if low in _BOOL_FALSE:
-                return False
-            raise ValueError("expected on/off, true/false, or yes/no")
-
-        if cast is int:
-            try:
-                value = int(raw_value)
-            except ValueError:
-                raise ValueError("expected a whole number")
-        elif cast is float:
-            try:
-                value = float(raw_value)
-            except ValueError:
-                raise ValueError("expected a number")
-        else:
-            value = raw_value
-
-        # Field-specific sanity ranges - reject nonsense before it ever
-        # reaches Config.save() / the containers that read these values.
-        if attr == "challenge_cpu_cores" and value <= 0:
-            raise ValueError("must be greater than 0")
-        if attr in ("checker_timeout", "docker_timeout") and value <= 0:
-            raise ValueError("must be greater than 0 seconds")
-        if attr == "openrouter_max_tokens" and not (50 <= value <= 4000):
-            raise ValueError("must be between 50 and 4000")
-        if attr == "challenge_mem_limit":
-            if not re.fullmatch(r"\d+[mMgG]", value):
-                raise ValueError("expected a format like 512m or 1g")
-
-        return value
+        return cast_and_validate(attr, raw_value)
 
     # ── reset ────────────────────────────────────────────────────────────
 

@@ -35,6 +35,7 @@ class BrowserScreen(Screen):
         Binding("slash",  "search",      "Search",        show=True),
         Binding("escape", "app.pop_screen", "Back", show=True),
         Binding("alt+x", "start_challenge", "Start", show=True),
+        Binding("r", "refresh", "Refresh", show=True),
     ]
 
     def __init__(self, **kwargs):
@@ -42,6 +43,7 @@ class BrowserScreen(Screen):
         self.challenges = []  
         self._active_item: ChallengeListItem | None = None
         self._starting_challenge: bool = False
+        self._loading_in_progress: bool = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main-area"):
@@ -68,10 +70,28 @@ class BrowserScreen(Screen):
     def on_mount(self) -> None:
         self.query_one(Footer).set_screen("browser")
         self.query_one("#search-input", Input).focus()
-        self._load_challenges()
+        self._start_load(force_refresh=False)
+
+    def on_screen_resume(self) -> None:
+        """This screen is cached (pushed by name, like Home/History), so
+        on_mount only ever fires once - without this, a challenge added or
+        changed after the first visit would never show up again without a
+        manual [r]."""
+        self._start_load(force_refresh=False)
+
+    def action_refresh(self) -> None:
+        """Manually re-check the registry for changes (key: R)."""
+        if self._loading_in_progress:
+            self.notify("Already refreshing...", title="CLICE", timeout=1)
+            return
+        self._start_load(force_refresh=True)
+
+    def _start_load(self, force_refresh: bool) -> None:
+        self._loading_in_progress = True
+        self._load_challenges(force_refresh)
 
     @work(thread=True)
-    def _load_challenges(self) -> None:
+    def _load_challenges(self, force_refresh: bool = False) -> None:
         """Fetch challenges off the main thread. This used to run directly
         in on_mount, which meant the entire TUI - including input, the
         loading overlay, everything - froze for however long the registry's
@@ -82,17 +102,19 @@ class BrowserScreen(Screen):
         config = Config()
         registry = RegistryService(config)
         try:
-            challenges = registry.get_challenges()
+            challenges = registry.get_challenges(force_refresh=force_refresh)
         except Exception as e:
             self.app.call_from_thread(self._on_load_error, e)
             return
 
-        self.app.call_from_thread(self._apply_challenges, challenges)
+        self.app.call_from_thread(self._apply_challenges, challenges, force_refresh)
 
-    def _apply_challenges(self, challenges: list) -> None:
+    def _apply_challenges(self, challenges: list, was_manual: bool = False) -> None:
         self.challenges = challenges
+        self._loading_in_progress = False
 
         lv = self.query_one("#challenge-list", ListView)
+        lv.clear()  # avoid duplicating rows when this runs more than once
         for ch in self.challenges:
             lv.append(ChallengeListItem(ch))
 
@@ -102,8 +124,11 @@ class BrowserScreen(Screen):
             self.query_one("#detail-panel", DetailPanel).update_challenge(self.challenges[0])
 
         self.query_one(LoadingOverlay).hide()
+        if was_manual:
+            self.notify(f"Loaded {len(self.challenges)} challenge(s)", title="CLICE", timeout=1)
 
     def _on_load_error(self, error: Exception) -> None:
+        self._loading_in_progress = False
         self.query_one(LoadingOverlay).hide()
         self.app.notify(f"Failed to load challenges: {error}", title="Error", severity="error")
 

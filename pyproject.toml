@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clice"
+version = "0.1.0"
+description = "CLI Competence Evaluator - sandboxed terminal challenge platform"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "textual>=8.0",
+    "rich>=13.0",
+    "docker>=7.0",
+    "pexpect>=4.9",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "textual-dev>=1.5",
+]
+
+[project.scripts]
+clice = "clice:main"
+
+[tool.setuptools]
+py-modules = ["clice"]
+
+[tool.setuptools.packages.find]
+include = ["ui*", "loader*", "logger*", "engine*"]
