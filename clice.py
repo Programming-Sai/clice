@@ -85,7 +85,14 @@ def cmd_run(args, config: Config) -> int:
     print(f"{challenge_info.get('description', 'No description')}\n")
 
     loader = ChallengeLoader(config)
-    container = None if args.mode == "raw" else loader.load_challenge(challenge_info)
+    try:
+        container = None if args.mode == "raw" else loader.load_challenge(challenge_info)
+    except KeyboardInterrupt:
+        # No container exists yet at this point (or the pull was cut short
+        # before one was created) - nothing to clean up, just exit quietly
+        # instead of a raw traceback.
+        print("\nInterrupted before the environment finished starting up.")
+        return 130
     print("✓ Environment ready\n")
 
     # container_name must be the REAL container's name, or ShellSession
@@ -98,25 +105,33 @@ def cmd_run(args, config: Config) -> int:
 
     print("Type commands. Type ':submit' when done.\n")
 
-    while True:
-        cmd = input("$ ").strip()
-        if not cmd:
-            continue
-        if cmd == ":submit":
-            break
-        if cmd == ":quit":
-            print("Session cancelled")
-            loader.cleanup(container)
-            return 0
+    try:
+        while True:
+            cmd = input("$ ").strip()
+            if not cmd:
+                continue
+            if cmd == ":submit":
+                break
+            if cmd == ":quit":
+                print("Session cancelled")
+                loader.cleanup(container)
+                return 0
 
-        output, exit_code, elapsed, prompt = session.execute(cmd)
-        if exit_code == 0:
-            print(f"[{elapsed:.2f}s]")
-        else:
-            print(f"[{elapsed:.2f}s] (exit {exit_code})")
-        if output:
-            print(output)
-        print(f"\n======\n {prompt} \n======\n")
+            output, exit_code, elapsed, prompt = session.execute(cmd)
+            if exit_code == 0:
+                print(f"[{elapsed:.2f}s]")
+            else:
+                print(f"[{elapsed:.2f}s] (exit {exit_code})")
+            if output:
+                print(output)
+            print(f"\n======\n {prompt} \n======\n")
+    except (KeyboardInterrupt, EOFError):
+        # Ctrl+C at the prompt, or stdin closing unexpectedly (e.g. piped
+        # input running out) - without this, either would propagate straight
+        # up and skip cleanup() entirely, orphaning the container.
+        print("\nInterrupted - cleaning up...")
+        loader.cleanup(container)
+        return 130
 
     log = session.submit()
 
