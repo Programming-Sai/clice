@@ -22,7 +22,7 @@ info()  { printf '\033[1;36m==>\033[0m %s\n' "$1"; }
 warn()  { printf '\033[1;33m==>\033[0m %s\n' "$1"; }
 error() { printf '\033[1;31m==>\033[0m %s\n' "$1" >&2; }
 
-# ── 1. Platform + arch detection - picks the matching pre-built binary ──
+# ── 1. Platform + arch detection ──────────────────────────────────────
 case "$(uname -s)" in
   Linux*)  OS="linux" ;;
   Darwin*) OS="macos" ;;
@@ -49,6 +49,15 @@ ASSET="clice-${OS}-${ARCH}"
 info "Detected: $OS/$ARCH -> $ASSET"
 
 # ── 2. Docker check - always ask before installing, unless a flag was given ──
+#
+# IMPORTANT: when this script runs via `curl ... | bash`, stdin is the pipe
+# from curl, not the terminal - so `read` (and any `[ -t 0 ]` check) can't
+# see the user's actual terminal at all. The fix used here: check `-t 1`
+# (stdout, which the pipe doesn't touch) to detect an interactive run, and
+# read the prompt explicitly from /dev/tty instead of stdin. Without this,
+# the prompt below would either hang forever or - as originally shipped -
+# silently skip itself every single time, defeating the whole point of
+# asking before installing anything.
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   info "Docker is installed and running."
 else
@@ -57,11 +66,14 @@ else
     DO_INSTALL="no"
     if [ "$WITH_DOCKER" = "yes" ]; then
       DO_INSTALL="yes"
-    elif [ "$WITH_DOCKER" != "no" ] && [ -t 0 ]; then
-      read -r -p "Install Docker now via the official get.docker.com script (uses sudo)? [y/N] " reply
+    elif [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+      read -r -p "Install Docker now via the official get.docker.com script (uses sudo)? [y/N] " reply < /dev/tty
       case "$reply" in
         [yY]*) DO_INSTALL="yes" ;;
       esac
+    elif [ "$WITH_DOCKER" != "no" ]; then
+      warn "No terminal available to ask interactively (and no --with-docker/--no-docker flag)."
+      warn "Skipping Docker install - re-run with --with-docker to install it automatically."
     fi
 
     if [ "$DO_INSTALL" = "yes" ]; then
