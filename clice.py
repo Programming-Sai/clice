@@ -245,10 +245,17 @@ def cmd_doctor(args, config: Config) -> int:
     print("clice doctor\n")
 
     py_version = sys.version_info
-    py_ok = py_version >= (3, 10)
-    print(f"[{'OK' if py_ok else 'FAIL'}] Python {py_version.major}.{py_version.minor}.{py_version.micro} "
-          f"({'>= 3.10 required' if not py_ok else 'meets minimum'})")
-    ok = ok and py_ok
+    is_frozen = getattr(sys, "frozen", False)
+    if not is_frozen:
+        # Only meaningful for a source install (pip install -e .) - the
+        # frozen binary bundles its own interpreter and never touches
+        # system Python at all, so there's nothing here worth reporting
+        # in that case; omitting it keeps doctor's output honest about
+        # Docker being the only real external dependency.
+        py_ok = py_version >= (3, 10)
+        print(f"[{'OK' if py_ok else 'FAIL'}] Python {py_version.major}.{py_version.minor}.{py_version.micro} "
+              f"({'>= 3.10 required' if not py_ok else 'meets minimum'})")
+        ok = ok and py_ok
 
     docker_status = Utilities().get_docker_status(force=True)
     docker_ok = docker_status.get("status") == "ok"
