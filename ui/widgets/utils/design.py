@@ -21,6 +21,14 @@ DIM_TEXT   = "#4a8f88"   # dim teal-grey  — labels, secondary info
 # Python ternary syntax:  value_if_true  if  condition  else  value_if_false
 ACCENT = ACCENT_OK if IS_PASSING else ACCENT_ERR
 
+# Textual's Toast auto-dismisses on a timer (default 5s) but ALSO dismisses
+# immediately on click, regardless of the configured timeout - so a large
+# timeout here doesn't mean "never dismissable," it means "stays until the
+# user actually clicks it, rather than vanishing on its own." Used for
+# error notifications and the settings-save confirmation, where auto-
+# dismissing risks the person missing something they need to act on.
+PERSISTENT_NOTIFICATION_TIMEOUT = 86400  # 24h - effectively "until clicked"
+
 def get_difficulty_color(difficulty):
     if difficulty == "beginner":
         return '#00ff88'

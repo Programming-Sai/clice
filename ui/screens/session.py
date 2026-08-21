@@ -24,6 +24,7 @@ from ui.widgets.loading_overlay import LoadingOverlay
 from ui.widgets.session.prompt_config import PROMPT_LEN, PROMPT_TEXT
 from ui.widgets.session.terminal_input import TerminalInput
 from ui.services.history import HistoryService
+from ui.widgets.utils.design import PERSISTENT_NOTIFICATION_TIMEOUT
     
 
 class SessionScreen(Screen):
@@ -264,7 +265,7 @@ class SessionScreen(Screen):
     def _show_verdict_error(self, error: str) -> None:
         """Show error if verification fails."""
         self.loading_overlay.hide()
-        self.notify(f"Verification failed: {error}", title="Error", severity="error")
+        self.notify(f"Verification failed: {error}", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
     
     # ── TIMER ──────────────────────────────────────────────────────────────────
 
@@ -369,7 +370,7 @@ class SessionScreen(Screen):
     def _on_shell_error(self, error: Exception) -> None:
         trace("screen_shell_error_ui", error=repr(error))
         self.loading_overlay.hide()
-        self.notify(f"Failed to start shell: {error}", title="Error", severity="error")
+        self.notify(f"Failed to start shell: {error}", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
         # input stays disabled — shell_session is still None, so _run_command's
         # existing "Shell not initialized" fallback won't silently swap to demo mode
         # unexpectedly; consider adding a retry binding here later.

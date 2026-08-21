@@ -18,6 +18,7 @@ from ui.widgets.history.search import SearchBar
 from ui.widgets.history.status import StatsBar
 from ui.services.history import HistoryService
 from ui.screens.verdict import VerdictScreen
+from ui.widgets.utils.design import PERSISTENT_NOTIFICATION_TIMEOUT
 
 ALLOW_DUMMY_DATA=False
 
@@ -261,7 +262,7 @@ class HistoryScreen(Screen):
         # Load the full session log
         full_log = self.history.get_session(session_id)
         if not full_log:
-            self.notify("Session not found", title="Error", severity="error")
+            self.notify("Session not found", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
             return
 
         # Reconstruct challenge dict

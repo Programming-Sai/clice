@@ -12,6 +12,7 @@ from ui.screens.verdict import VerdictScreen
 from ui.widgets.footer import Footer   # or from .screens import ...
 from loader.challenge_loader import ChallengeLoader
 from logger.debug import trace
+from ui.widgets.utils.design import PERSISTENT_NOTIFICATION_TIMEOUT
 
 
 class LoadingScreen(Screen):
@@ -172,7 +173,7 @@ class CliceApp(App):
         # Loading (which would leave the stack momentarily empty) and
         # then pushing Home as a separate step.
         self.switch_screen("home")
-        self.notify(f"Failed to start challenge: {error}", title="Error", severity="error")
+        self.notify(f"Failed to start challenge: {error}", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
     
     def action_new_session(self) -> None:
         self.notify("🖥  NEW_SESSION — not yet implemented!", title="CLICE")

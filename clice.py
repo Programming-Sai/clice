@@ -11,10 +11,14 @@ clice - CLI Competence Evaluator
     clice reset [key|all]        revert a setting (or everything) to its default
     clice config                 list every current setting
     clice doctor                 check that Docker/Python/the registry are all OK
+    clice update                 update clice to the latest release
+    clice uninstall              uninstall clice
 """
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from ui.services.registry import RegistryService
@@ -244,6 +248,74 @@ def cmd_config(args, config: Config) -> int:
 
 # ── doctor ────────────────────────────────────────────────────────────
 
+# ── update / uninstall ───────────────────────────────────────────────
+
+_INSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/programming-sai/clice/main/install.sh"
+_UNINSTALL_SCRIPT_URL = "https://raw.githubusercontent.com/programming-sai/clice/main/uninstall.sh"
+
+
+def _fetch_and_run_script(url: str, script_args: list[str]) -> int:
+    """Download a shell script and run it via bash, streaming its output
+    live (not captured) so interactive prompts and colored output work
+    exactly as they would running it directly. Runs the real, single
+    source of truth (install.sh / uninstall.sh) rather than reimplementing
+    their logic here - the two can never drift apart."""
+    import requests
+
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"Failed to fetch {url}: {e}")
+        return 1
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
+        f.write(response.text)
+        script_path = f.name
+
+    try:
+        result = subprocess.run(["bash", script_path, *script_args])
+        return result.returncode
+    finally:
+        Path(script_path).unlink(missing_ok=True)
+
+
+def cmd_update(args, config: Config) -> int:
+    is_frozen = getattr(sys, "frozen", False)
+    if not is_frozen:
+        print("Note: this is a source install (pip install -e .) - 'update' only")
+        print("affects the separately-installed release binary in ~/.clice/app,")
+        print("not this dev environment. Use 'git pull' to update your source checkout.\n")
+
+    script_args = []
+    if args.with_docker:
+        script_args.append("--with-docker")
+    if args.no_docker:
+        script_args.append("--no-docker")
+
+    print("Fetching the latest install script...")
+    code = _fetch_and_run_script(_INSTALL_SCRIPT_URL, script_args)
+    if code == 0 and is_frozen:
+        print("\nUpdate complete. Since this replaces the binary on disk (not the")
+        print("copy already running), the new version takes effect the next time")
+        print("you run clice - not this current invocation.")
+    return code
+
+
+def cmd_uninstall(args, config: Config) -> int:
+    if not args.yes:
+        reply = input("This will remove clice and its local data. Continue? [y/N] ").strip().lower()
+        if reply not in ("y", "yes"):
+            print("Cancelled.")
+            return 0
+
+    script_args = []
+    if args.keep_settings:
+        script_args.append("--keep-settings")
+
+    return _fetch_and_run_script(_UNINSTALL_SCRIPT_URL, script_args)
+
+
 def cmd_doctor(args, config: Config) -> int:
     ok = True
 
@@ -338,6 +410,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("config", help="List all current settings")
     sub.add_parser("doctor", help="Check that Docker/Python/the registry are all OK")
+
+    p_update = sub.add_parser("update", help="Update clice to the latest release")
+    p_update.add_argument("--with-docker", action="store_true", help="Auto-install Docker if missing, no prompt")
+    p_update.add_argument("--no-docker", action="store_true", help="Never install Docker, no prompt")
+
+    p_uninstall = sub.add_parser("uninstall", help="Uninstall clice")
+    p_uninstall.add_argument("--keep-settings", action="store_true", help="Keep settings.json and history")
+    p_uninstall.add_argument("-y", "--yes", action="store_true", help="Skip the confirmation prompt")
     sub.add_parser("history", help="Launch the TUI directly into History")
     sub.add_parser("settings", help="Launch the TUI directly into Settings")
     sub.add_parser("browser", help="Launch the TUI directly into the Browser")
@@ -354,6 +434,8 @@ COMMANDS = {
     "reset": cmd_reset,
     "config": cmd_config,
     "doctor": cmd_doctor,
+    "update": cmd_update,
+    "uninstall": cmd_uninstall,
     "history": cmd_history,
     "settings": cmd_settings,
     "browser": cmd_browser,

@@ -42,6 +42,7 @@ from ui.services.settings_schema import (
     cast_and_validate,
     display_value as _shared_display_value,
 )
+from ui.widgets.utils.design import PERSISTENT_NOTIFICATION_TIMEOUT
 
 
 BRAND      = "#00e5cc"   # main teal  - borders, section headers, prompts
@@ -473,7 +474,7 @@ class SettingsScreen(Screen):
 
         value = getattr(self.config, attr)
         display = value if value not in (None, "") else "(not set)"
-        self.notify(f"{key} = {display}", title="CLICE", timeout=6)
+        self.notify(f"{key} = {display}", title="CLICE", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
         self._set_status(f"Revealed {key} above (dismiss the notification to hide it again)")
 
     # ── help ─────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ import re
 from ui.widgets.challenges.search_input import SearchInput
 from ui.widgets.footer import Footer
 from ui.widgets.loading_overlay import LoadingOverlay
+from ui.widgets.utils.design import PERSISTENT_NOTIFICATION_TIMEOUT
 from loader.challenge_loader import ChallengeLoader
 from logger.debug import trace
 
@@ -130,7 +131,7 @@ class BrowserScreen(Screen):
     def _on_load_error(self, error: Exception) -> None:
         self._loading_in_progress = False
         self.query_one(LoadingOverlay).hide()
-        self.app.notify(f"Failed to load challenges: {error}", title="Error", severity="error")
+        self.app.notify(f"Failed to load challenges: {error}", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
 
     def _set_active(self, item: ChallengeListItem | None) -> None:
         if self._active_item is not None:
@@ -264,7 +265,7 @@ class BrowserScreen(Screen):
         # challenge["check_url"] = "https://raw.githubusercontent.com/Programming-Sai/clice-challenges/main/hello-clice/check.py"
 
         if not challenge.get("image") or not challenge.get("check_url"):
-            self.app.notify("Challenge missing image or check_url", title="Error", severity="error")
+            self.app.notify("Challenge missing image or check_url", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
             return
     
         self._starting_challenge = True
@@ -301,7 +302,7 @@ class BrowserScreen(Screen):
                 def show_error() -> None:
                     loading.hide()
                     self._starting_challenge = False
-                    self.app.notify(f"Failed to start challenge: {error_text}", title="Error", severity="error")
+                    self.app.notify(f"Failed to start challenge: {error_text}", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
 
                 self.app.call_from_thread(show_error)
                 if loader and container:

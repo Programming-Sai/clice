@@ -6,6 +6,39 @@
 #   curl -fsSL .../install.sh | bash -s -- --no-docker     # never install Docker, no prompt
 set -euo pipefail
 
+print_help() {
+  cat << 'EOF'
+clice installer
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/programming-sai/clice/main/install.sh | bash
+  curl -fsSL .../install.sh | bash -s -- [options]
+
+Options:
+  --with-docker   Install Docker automatically on Linux if missing (no prompt)
+  --no-docker     Never install Docker, even if missing (no prompt)
+  -h, --help      Show this help and exit
+
+What it does:
+  1. Detects your platform (Linux, macOS, or WSL - no native Windows support)
+  2. Checks for Docker; on Linux, offers to install it via the official
+     get.docker.com script if it's missing (always asks first, unless
+     --with-docker/--no-docker is given)
+  3. Downloads the matching pre-built clice binary from the latest release
+  4. Installs it to ~/.clice/app and symlinks it onto ~/.local/bin
+
+Re-running this script later updates clice to the latest release - or use
+`clice update` once it's installed, which does the same thing from inside
+the app itself.
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) print_help; exit 0 ;;
+  esac
+done
+
 REPO="programming-sai/clice"
 INSTALL_DIR="$HOME/.clice/app"
 BIN_DIR="$HOME/.local/bin"
