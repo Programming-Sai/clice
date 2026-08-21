@@ -107,7 +107,12 @@ def cmd_run(args, config: Config) -> int:
 
     try:
         while True:
-            cmd = input("$ ").strip()
+            # session.current_prompt is the actual prompt captured from
+            # inside the container (e.g. "root@abc123:/workspace$"), kept
+            # up to date by execute() after every command - using it here
+            # instead of a static "$ " is what makes this look and behave
+            # like a real terminal rather than a debug harness.
+            cmd = input(f"{session.current_prompt} ").strip()
             if not cmd:
                 continue
             if cmd == ":submit":
@@ -118,13 +123,13 @@ def cmd_run(args, config: Config) -> int:
                 return 0
 
             output, exit_code, elapsed, prompt = session.execute(cmd)
-            if exit_code == 0:
-                print(f"[{elapsed:.2f}s]")
-            else:
-                print(f"[{elapsed:.2f}s] (exit {exit_code})")
+            # No timing, no exit-code annotation, no "======" framing - a
+            # real shell doesn't announce any of that after a plain
+            # command, it just shows the output. session.commands still
+            # tracks exit_code/elapsed internally for scoring regardless
+            # of what gets printed here.
             if output:
                 print(output)
-            print(f"\n======\n {prompt} \n======\n")
     except (KeyboardInterrupt, EOFError):
         # Ctrl+C at the prompt, or stdin closing unexpectedly (e.g. piped
         # input running out) - without this, either would propagate straight
