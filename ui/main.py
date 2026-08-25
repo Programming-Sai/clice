@@ -140,7 +140,11 @@ class CliceApp(App):
     def on_mount(self):
         result = termmax.go_fullscreen()
         trace("app_on_mount", initial_challenge=bool(self.initial_challenge), initial_screen=self.initial_screen)
-        self._check_terminal_size() if not result.success else ""
+        if not result.success:
+            self._check_terminal_size() 
+            self.notify(str(result), title="Small terminal",
+                            severity="warning",
+                            timeout=PERSISTENT_NOTIFICATION_TIMEOUT,)
         if self.initial_challenge:
             # Deliberately do NOT push "home" here at all. Pushing it and
             # immediately covering it with LoadingScreen was the previous
