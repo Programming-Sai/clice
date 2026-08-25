@@ -46,15 +46,6 @@ class CliceApp(App):
     
     ansi_color = True
 
-    def __init__(self, initial_challenge: dict | None = None, initial_screen: str | None = None, **kwargs):
-        """initial_challenge: skip Home and load straight into this
-        challenge's session (used by `clice open <id>`).
-        initial_screen: push this named screen instead of "home" (used by
-        `clice history`/`clice settings`/`clice browser`)."""
-        super().__init__(**kwargs)
-        self.initial_challenge = initial_challenge
-        self.initial_screen = initial_screen
-    
     # Shared base CSS (applies to all screens)
     CSS = """
     /* Global styles that apply everywhere */
@@ -104,8 +95,52 @@ class CliceApp(App):
     }
 
     
+    # Below this, clice's multi-panel layouts (side-by-side boxes, wide
+    # tables) start looking cramped or clipped. Not a hard requirement -
+    # just a threshold worth warning about, since we can't reliably make
+    # the terminal WINDOW itself maximize from inside (that's a terminal
+    # emulator / OS-level thing, not something a program running inside
+    # it can portably trigger - checked directly, most terminals including
+    # Windows Terminal don't honor the classic xterm "maximize" escape
+    # sequence). This is the part of that request that's actually
+    # achievable from in here: noticing and saying something about it.
+    MIN_TERMINAL_WIDTH = 100
+    MIN_TERMINAL_HEIGHT = 30
+
+    def __init__(self, initial_challenge: dict | None = None, initial_screen: str | None = None, **kwargs):
+        """initial_challenge: skip Home and load straight into this
+        challenge's session (used by `clice open <id>`).
+        initial_screen: push this named screen instead of "home" (used by
+        `clice history`/`clice settings`/`clice browser`)."""
+        super().__init__(**kwargs)
+        self.initial_challenge = initial_challenge
+        self.initial_screen = initial_screen
+        self._size_warning_shown = False
+
+    def _check_terminal_size(self) -> None:
+        width, height = self.size
+        too_small = width < self.MIN_TERMINAL_WIDTH or height < self.MIN_TERMINAL_HEIGHT
+        if too_small and not self._size_warning_shown:
+            self.notify(
+                f"Terminal is {width}x{height} - clice looks best at "
+                f"{self.MIN_TERMINAL_WIDTH}x{self.MIN_TERMINAL_HEIGHT} or larger. "
+                f"Try maximizing your terminal window.",
+                title="Small terminal",
+                severity="warning",
+                timeout=PERSISTENT_NOTIFICATION_TIMEOUT,
+            )
+            self._size_warning_shown = True
+        elif not too_small:
+            # Reset so shrinking again later re-warns, instead of only
+            # ever warning once per whole app lifetime.
+            self._size_warning_shown = False
+
+    def on_resize(self, event) -> None:
+        self._check_terminal_size()
+
     def on_mount(self):
         trace("app_on_mount", initial_challenge=bool(self.initial_challenge), initial_screen=self.initial_screen)
+        self._check_terminal_size()
         if self.initial_challenge:
             # Deliberately do NOT push "home" here at all. Pushing it and
             # immediately covering it with LoadingScreen was the previous

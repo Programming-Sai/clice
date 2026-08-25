@@ -128,9 +128,15 @@ fi
 # ── 3. Download and extract the matching pre-built binary ────────────
 LATEST_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}.tar.gz"
 mkdir -p "$INSTALL_DIR"
-info "Downloading $ASSET..."
-if ! curl -fsSL "$LATEST_URL" -o "/tmp/${ASSET}.tar.gz"; then
+info "Downloading $ASSET (this is the only large download - the script itself is tiny)..."
+if ! curl -fL --progress-bar "$LATEST_URL" -o "/tmp/${ASSET}.tar.gz"; then
   error "Download failed. Is there a released build for $OS/$ARCH yet?"
+  error "  $LATEST_URL"
+  exit 1
+fi
+
+if [ ! -s "/tmp/${ASSET}.tar.gz" ]; then
+  error "Downloaded file is empty - something went wrong (network issue, or the release asset is missing)."
   error "  $LATEST_URL"
   exit 1
 fi

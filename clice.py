@@ -15,6 +15,7 @@ clice - CLI Competence Evaluator
     clice uninstall              uninstall clice
 """
 import argparse
+import contextlib
 import json
 import subprocess
 import sys
@@ -71,6 +72,149 @@ def cmd_list(args, config: Config) -> int:
 
 
 # ── run ───────────────────────────────────────────────────────────────
+
+@contextlib.contextmanager
+def _quiet_stdout():
+    """Redirect stdout to stderr for the duration of the block. Used
+    around loader/session calls that have plain print() statements meant
+    for a human watching a terminal (progress messages, verification
+    diagnostics) - in agent mode, stdout must contain ONLY our JSON
+    protocol lines, or anything parsing that stream breaks. Nothing about
+    the underlying pipeline changes; this only redirects where its
+    incidental human-facing prints land."""
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = real_stdout
+
+
+def cmd_agent(args, config: Config) -> int:
+    """Machine-facing counterpart to `run`: a JSON-lines protocol over
+    stdin/stdout so an AI agent (or any orchestrator) can drive a
+    challenge programmatically. Reuses the exact same ChallengeLoader,
+    ShellSession, verify(), and evaluate() a human session uses - the
+    only new thing here is the interface, not the underlying pipeline,
+    so a model is graded by the identical mechanism a person is.
+
+    Protocol (one JSON object per line, each direction):
+      in:  {"command": "<shell command>"}   - execute it
+      in:  {"submit": true}                  - finish and grade
+      out: {"type": "ready", "prompt": ..., "challenge": {...}}
+      out: {"type": "observation", "stdout": ..., "exit_code": ...,
+            "elapsed": ..., "prompt": ...}
+      out: {"type": "error", "message": ...}
+      out: {"type": "result", "passed": ..., "checker_output": ...,
+            "checker_exit_code": ..., "checker_error": ..., "metrics": {...}}
+    """
+    from loader.challenge_loader import ChallengeLoader
+    from logger.session import ShellSession
+    from engine.evaluator import evaluate
+
+    def emit(obj: dict) -> None:
+        print(json.dumps(obj), flush=True)
+
+    registry = RegistryService(config)
+    challenges = registry.get_challenges()
+    challenge_info = resolve_challenge(challenges, args.challenge)
+    if not challenge_info:
+        emit({"type": "error", "message": f"Challenge '{args.challenge}' not found"})
+        return 1
+
+    loader = ChallengeLoader(config)
+    try:
+        with _quiet_stdout():
+            container = loader.load_challenge(challenge_info)
+    except Exception as e:
+        emit({"type": "error", "message": f"Failed to start environment: {e}"})
+        return 1
+
+    session = ShellSession(challenge_info.get("id"), container_name=container.name)
+    try:
+        session.start()
+    except Exception as e:
+        emit({"type": "error", "message": f"Failed to start shell: {e}"})
+        loader.cleanup(container)
+        return 1
+
+    emit({
+        "type": "ready",
+        "prompt": session.current_prompt,
+        "challenge": {
+            "code": challenge_info.get("code"),
+            "title": challenge_info.get("title"),
+            "description": challenge_info.get("description"),
+            "objectives": challenge_info.get("objectives", []),
+        },
+    })
+
+    command_count = 0
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError as e:
+                emit({"type": "error", "message": f"Invalid JSON: {e}"})
+                continue
+
+            if msg.get("submit"):
+                break
+
+            command = msg.get("command")
+            if command is None:
+                emit({"type": "error", "message": "Expected a 'command' or 'submit' key"})
+                continue
+
+            command_count += 1
+            if command_count > args.max_commands:
+                emit({"type": "error", "message": f"max_commands ({args.max_commands}) exceeded - submitting current state"})
+                break
+
+            output, exit_code, elapsed, prompt = session.execute(command)
+            emit({
+                "type": "observation",
+                "stdout": output,
+                "exit_code": exit_code,
+                "elapsed": elapsed,
+                "prompt": prompt,
+            })
+    except (KeyboardInterrupt, EOFError):
+        emit({"type": "error", "message": "Interrupted before submit"})
+        loader.cleanup(container)
+        return 130
+
+    log = session.submit()
+    with _quiet_stdout():
+        verify_result = loader.verify(challenge_info.get("id"), container)
+    log["goal_reached"] = verify_result["passed"]
+    log["checker_output"] = verify_result["output"]
+    log["checker_exit_code"] = verify_result["exit_code"]
+    log["checker_error"] = verify_result["error"]
+    metrics = evaluate(log)
+
+    safe_timestamp = log["started_at"].replace(":", "-")
+    log_path = Path("assets") / f"{challenge_info.get('id')}_{safe_timestamp}_agent.json"
+    log_path.parent.mkdir(exist_ok=True)
+    with open(log_path, "w") as f:
+        json.dump(log, f, indent=2)
+
+    emit({
+        "type": "result",
+        "passed": verify_result["passed"],
+        "checker_exit_code": verify_result["exit_code"],
+        "checker_output": verify_result["output"],
+        "checker_error": verify_result["error"],
+        "metrics": metrics,
+        "log_path": str(log_path),
+    })
+
+    loader.cleanup(container)
+    return 0 if verify_result["passed"] else 1
+
 
 def cmd_run(args, config: Config) -> int:
     from loader.challenge_loader import ChallengeLoader
@@ -334,6 +478,19 @@ def cmd_doctor(args, config: Config) -> int:
               f"({'>= 3.10 required' if not py_ok else 'meets minimum'})")
         ok = ok and py_ok
 
+    # Isolated, general internet check - deliberately separate from the
+    # Docker and registry checks below, so a friend with no network at
+    # all sees a clear, specific reason instead of having to guess
+    # whether a Docker or registry failure means "no internet" or
+    # something narrower (GitHub down, GHCR auth issue, etc).
+    import requests
+    try:
+        requests.head("https://raw.githubusercontent.com", timeout=5)
+        print("[OK] Internet connection reachable")
+    except requests.RequestException as e:
+        print(f"[FAIL] No internet connection detected: {e}")
+        ok = False
+
     docker_status = Utilities().get_docker_status(force=True)
     docker_ok = docker_status.get("status") == "ok"
     print(f"[{'OK' if docker_ok else 'FAIL'}] Docker: {docker_status.get('message', 'unknown')}")
@@ -395,6 +552,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("challenge", help="Challenge id, code, or UUID prefix")
     p_run.add_argument("mode", nargs="?", default="container", help="'container' (default) or 'raw'")
 
+    p_agent = sub.add_parser("agent", help="Drive a challenge programmatically via JSON lines on stdin/stdout")
+    p_agent.add_argument("challenge", help="Challenge id, code, or UUID prefix")
+    p_agent.add_argument("--max-commands", type=int, default=100, help="Force-submit after this many commands (default: 100)")
+
     p_open = sub.add_parser("open", help="Launch the TUI directly into a challenge")
     p_open.add_argument("challenge", help="Challenge id, code, or UUID prefix")
 
@@ -428,6 +589,7 @@ def build_parser() -> argparse.ArgumentParser:
 COMMANDS = {
     "list": cmd_list,
     "run": cmd_run,
+    "agent": cmd_agent,
     "open": cmd_open,
     "set": cmd_set,
     "get": cmd_get,

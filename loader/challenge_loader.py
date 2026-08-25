@@ -4,6 +4,7 @@ import docker
 import io
 import tarfile
 import threading
+import time
 import requests
 
 from ui.services.config import Config
@@ -59,16 +60,38 @@ class ChallengeLoader:
         return container
 
     def _pull_with_timeout(self, image_name):
-        """Pull an image with a hard timeout. docker-py's images.pull() has
-        no per-call timeout of its own, so a stalled/unreachable registry
-        (bad DNS, dead TLS handshake, etc.) can otherwise hang far longer
-        than any reasonable app-level wait - the error the loading-screen
-        timeout is meant to prevent."""
+        """Pull an image with a hard timeout, printing progress as it goes.
+        docker-py's images.pull() has no per-call timeout of its own, so a
+        stalled/unreachable registry (bad DNS, dead TLS handshake, etc.)
+        can otherwise hang far longer than any reasonable app-level wait -
+        the error the loading-screen timeout is meant to prevent. Using
+        the low-level streaming API (rather than the silent, blocking
+        images.pull()) also means a slow-but-working pull shows visible
+        progress instead of looking identical to a hung one."""
         result = {"error": None}
 
         def do_pull():
             try:
-                self.docker.images.pull(image_name)
+                last_status = None
+                last_print_time = 0.0
+                for chunk in self.docker.api.pull(image_name, stream=True, decode=True):
+                    status = chunk.get("status")
+                    progress = chunk.get("progress")
+                    now = time.monotonic()
+                    # Print on a real status change (new layer, phase change),
+                    # OR at most every ~2s while the status text stays the
+                    # same - Docker's status stays literally "Downloading"
+                    # for an entire layer's transfer, with only the embedded
+                    # progress percentage changing, so status-only dedup
+                    # would print one line and then go silent for the whole
+                    # download - exactly the "can't tell if it's doing
+                    # anything" problem this is meant to fix.
+                    status_changed = status and status != last_status
+                    time_elapsed = (now - last_print_time) >= 2.0
+                    if status and (status_changed or time_elapsed):
+                        print(f"  {status} {progress or ''}".rstrip())
+                        last_status = status
+                        last_print_time = now
             except Exception as e:
                 result["error"] = e
 
