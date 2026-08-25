@@ -143,7 +143,7 @@ class CliceApp(App):
         if not result.success:
             self._check_terminal_size() 
             self.notify(str(result), title="Small terminal",
-                            severity="warning",
+                            severity="error",
                             timeout=PERSISTENT_NOTIFICATION_TIMEOUT,)
         if self.initial_challenge:
             # Deliberately do NOT push "home" here at all. Pushing it and
