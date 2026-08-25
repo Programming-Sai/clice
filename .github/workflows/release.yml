@@ -43,7 +43,7 @@ jobs:
       - name: Install build + runtime dependencies
         run: |
           pip install pyinstaller
-          pip install "textual>=8.0" "rich>=13.0" "docker>=7.0" "pexpect>=4.9" "requests>=2.31" "python-dotenv>=1.0"
+          pip install -r requirements.txt
 
       - name: Build onedir bundle
         run: pyinstaller clice.spec
