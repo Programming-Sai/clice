@@ -13,7 +13,7 @@ from ui.widgets.footer import Footer   # or from .screens import ...
 from loader.challenge_loader import ChallengeLoader
 from logger.debug import trace
 from ui.widgets.utils.design import PERSISTENT_NOTIFICATION_TIMEOUT
-
+import termmax
 
 class LoadingScreen(Screen):
     """Minimal placeholder shown while `clice open <id>` is pulling/starting
@@ -82,6 +82,7 @@ class CliceApp(App):
         ("h", "history",     "HISTORY"),
         ("s", "settings",    "SETTINGS"),
         ("q", "quit",        "QUIT"),
+        ("f11", "toggle_fullscreen", "Fullscreen"),
     ]
     
     # Register screens
@@ -135,12 +136,11 @@ class CliceApp(App):
             # ever warning once per whole app lifetime.
             self._size_warning_shown = False
 
-    def on_resize(self, event) -> None:
-        self._check_terminal_size()
 
     def on_mount(self):
+        result = termmax.go_fullscreen()
         trace("app_on_mount", initial_challenge=bool(self.initial_challenge), initial_screen=self.initial_screen)
-        self._check_terminal_size()
+        self._check_terminal_size() if not result.success else ""
         if self.initial_challenge:
             # Deliberately do NOT push "home" here at all. Pushing it and
             # immediately covering it with LoadingScreen was the previous
@@ -227,6 +227,11 @@ class CliceApp(App):
     def action_settings(self) -> None:
         self.push_screen("settings")
 
+    def action_toggle_fullscreen(self) -> None:
+          """Toggle fullscreen mode."""
+          termmax.go_fullscreen() if not getattr(self, "_fs_on", False) else termmax.restore()
+          self._fs_on = not getattr(self, "_fs_on", False)
+
 def run(initial_challenge: dict | None = None, initial_screen: str | None = None):
     trace("app_run")
     app = CliceApp(initial_challenge=initial_challenge, initial_screen=initial_screen)
@@ -234,6 +239,7 @@ def run(initial_challenge: dict | None = None, initial_screen: str | None = None
 
 if __name__ == "__main__":
     run()
+
 
 
 # TODO we need to have a unified prompt text. right now it is hard coded. we need one directly from the session itself.

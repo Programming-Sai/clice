@@ -15,6 +15,7 @@ dependencies = [
     "pexpect>=4.9",
     "requests>=2.31",
     "python-dotenv>=1.0",
+    "termmax @ git+https://github.com/Programming-Sai/termmax.git",
 ]
 
 [project.optional-dependencies]
