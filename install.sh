@@ -119,6 +119,85 @@ else
       warn "Skipping Docker install. clice will not work until Docker is installed and running:"
       warn "  https://docs.docker.com/engine/install/"
     fi
+  fi
+
+  # ── Display server detection and fullscreen tool install ─────────
+  # Check which display server is in use (X11 vs Wayland)
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    DISPLAY_SERVER="wayland"
+  elif [ -n "${DISPLAY:-}" ]; then
+    DISPLAY_SERVER="x11"
+  else
+    DISPLAY_SERVER="unknown"
+  fi
+
+  # Install the appropriate fullscreen tool based on display server
+  if [ "$DISPLAY_SERVER" = "wayland" ]; then
+    # Wayland: check for compositor-specific tools or xdotool fallback
+    if command -v swaymsg >/dev/null 2>&1 || command -v hyprctl >/dev/null 2>&1; then
+      info "Wayland compositor tool detected (sway/hyprland)."
+    elif command -v xdotool >/dev/null 2>&1; then
+      info "xdotool is installed (XWayland fallback)."
+    else
+      warn "No Wayland fullscreen tool found. Installing xdotool (XWayland fallback)..."
+      if [ "$WITH_DOCKER" = "yes" ] || [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+        read -r -p "Install xdotool now via apt (requires sudo)? [y/N] " reply < /dev/tty
+        case "$reply" in
+          [yY]*)
+            info "Installing xdotool..."
+            sudo apt-get update -qq && sudo apt-get install -qq -y xdotool
+            info "xdotool installed successfully."
+            ;;
+          *)
+            warn "Skipping xdotool install. Fullscreen features may not work on Wayland."
+            ;;
+        esac
+      else
+        warn "Run 'sudo apt-get install xdotool' manually for fullscreen support on Wayland."
+      fi
+    fi
+  elif [ "$DISPLAY_SERVER" = "x11" ]; then
+    # X11: install wmctrl (preferred) or xdotool (fallback)
+    if command -v wmctrl >/dev/null 2>&1; then
+      info "wmctrl is installed."
+    elif command -v xdotool >/dev/null 2>&1; then
+      info "xdotool is installed (X11 fallback)."
+    else
+      warn "wmctrl or xdotool is required for fullscreen support on X11."
+      if [ "$WITH_DOCKER" = "yes" ] || [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+        read -r -p "Install wmctrl now via apt (requires sudo)? If it fails, xdotool will be offered. [y/N] " reply < /dev/tty
+        case "$reply" in
+          [yY]*)
+            info "Installing wmctrl..."
+            if sudo apt-get update -qq && sudo apt-get install -qq -y wmctrl 2>/dev/null; then
+              info "wmctrl installed successfully."
+            else
+              warn "wmctrl installation failed. Trying xdotool as fallback..."
+              read -r -p "Install xdotool instead? [y/N] " xdotool_reply < /dev/tty
+              case "$xdotool_reply" in
+                [yY]*)
+                  info "Installing xdotool..."
+                  sudo apt-get install -qq -y xdotool
+                  info "xdotool installed successfully."
+                  ;;
+                *)
+                  warn "Skipping xdotool install. Fullscreen features will not work."
+                  ;;
+              esac
+            fi
+            ;;
+          *)
+            warn "Skipping wmctrl install. Fullscreen features will not work."
+            warn "You can manually install either: 'sudo apt install wmctrl' or 'sudo apt install xdotool'"
+            ;;
+        esac
+      else
+        warn "Run 'sudo apt install wmctrl' or 'sudo apt install xdotool' manually for fullscreen support on X11."
+      fi
+    fi
+  else
+    warn "Could not detect display server (X11/Wayland). Fullscreen support may not work."
+  fi
   else
     warn "clice needs Docker Desktop here - this script can't install a GUI app for you."
     warn "  brew install --cask docker   (then launch it once from Applications)"
