@@ -24,6 +24,7 @@ from pathlib import Path
 
 from ui.services.registry import RegistryService
 from ui.services.config import Config
+from ui.services.history import HistoryService
 from ui.services.settings_schema import (
     FIELDS, KEY_TO_ATTR, cast_and_validate, display_value,
 )
@@ -196,11 +197,10 @@ def cmd_agent(args, config: Config) -> int:
     log["checker_error"] = verify_result["error"]
     metrics = evaluate(log)
 
-    safe_timestamp = log["started_at"].replace(":", "-")
-    log_path = Path("assets") / f"{challenge_info.get('id')}_{safe_timestamp}_agent.json"
-    log_path.parent.mkdir(exist_ok=True)
-    with open(log_path, "w") as f:
-        json.dump(log, f, indent=2)
+    # Save to history via HistoryService
+    history = HistoryService(config)
+    session_id = history.save_session(log, challenge_info)
+    history.update_session(session_id, metrics, "")
 
     emit({
         "type": "result",
@@ -209,7 +209,7 @@ def cmd_agent(args, config: Config) -> int:
         "checker_output": verify_result["output"],
         "checker_error": verify_result["error"],
         "metrics": metrics,
-        "log_path": str(log_path),
+        "log_path": str(history.SESSIONS_DIR / f"{session_id}.json"),
     })
 
     loader.cleanup(container)
@@ -298,11 +298,10 @@ def cmd_run(args, config: Config) -> int:
     log["checker_error"] = verify_result["error"]
     metrics = evaluate(log)
 
-    safe_timestamp = log["started_at"].replace(":", "-")
-    log_path = Path("assets") / f"{challenge_info.get('id')}_{safe_timestamp}.json"
-    log_path.parent.mkdir(exist_ok=True)
-    with open(log_path, "w") as f:
-        json.dump(log, f, indent=2)
+    # Save to history via HistoryService
+    history = HistoryService(config)
+    session_id = history.save_session(log, challenge_info)
+    history.update_session(session_id, metrics, "")
 
     print("\n" + "=" * 50)
     print("RESULTS")
@@ -314,7 +313,7 @@ def cmd_run(args, config: Config) -> int:
     print(f"Commands: {metrics['command_count']}")
     print(f"Time: {metrics['time_seconds']:.1f}s")
     print(f"Error rate: {metrics['error_rate']:.0f}%")
-    print(f"Log saved: {log_path}")
+    print(f"Log saved: {history.SESSIONS_DIR / f'{session_id}.json'}")
 
     loader.cleanup(container)
     return 0 if passed else 1
@@ -387,6 +386,21 @@ def cmd_config(args, config: Config) -> int:
     for key, attr, description in FIELDS:
         value = getattr(config, attr)
         print(f"{key:<26} {display_value(attr, value):<20} {description}")
+    return 0
+
+
+# ── gc ────────────────────────────────────────────────────────────────
+
+def cmd_gc(args, config: Config) -> int:
+    """Remove orphaned clice-managed containers (crashed/killed sessions)."""
+    from loader.challenge_loader import ChallengeLoader
+    try:
+        loader = ChallengeLoader(config)
+    except Exception as e:
+        print(f"Cannot reach Docker: {e}")
+        return 1
+    reaped = loader.gc()
+    print(f"Removed {reaped} orphaned container(s).")
     return 0
 
 
@@ -493,7 +507,25 @@ def cmd_doctor(args, config: Config) -> int:
 
     docker_status = Utilities().get_docker_status(force=True)
     docker_ok = docker_status.get("status") == "ok"
-    print(f"[{'OK' if docker_ok else 'FAIL'}] Docker: {docker_status.get('message', 'unknown')}")
+    docker_msg = docker_status.get("message", "unknown")
+
+    # Add helpful hint if Docker is installed but not connected
+    if not docker_ok and "NOT INSTALLED" not in docker_msg:
+        # Docker appears installed (we got past the Exception), so check
+        # if it might be a permissions issue (user not in docker group)
+        import shutil
+        import os
+        if shutil.which("docker"):
+            try:
+                # Check if we're in the docker group
+                import grp
+                docker_gid = grp.getgrnam("docker").gr_gid
+                if docker_gid not in os.getgroups():
+                    docker_msg += " (user not in 'docker' group - run 'sudo usermod -aG docker $USER' and log out/in)"
+            except (KeyError, ImportError):
+                pass
+
+    print(f"[{'OK' if docker_ok else 'FAIL'}] Docker: {docker_msg}")
     ok = ok and docker_ok
 
     try:
@@ -571,6 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("config", help="List all current settings")
     sub.add_parser("doctor", help="Check that Docker/Python/the registry are all OK")
+    sub.add_parser("gc", help="Remove orphaned clice challenge containers")
 
     p_update = sub.add_parser("update", help="Update clice to the latest release")
     p_update.add_argument("--with-docker", action="store_true", help="Auto-install Docker if missing, no prompt")
@@ -596,6 +629,7 @@ COMMANDS = {
     "reset": cmd_reset,
     "config": cmd_config,
     "doctor": cmd_doctor,
+    "gc": cmd_gc,
     "update": cmd_update,
     "uninstall": cmd_uninstall,
     "history": cmd_history,

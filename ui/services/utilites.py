@@ -30,10 +30,21 @@ class Utilities:
             client.ping()
             version = client.version().get("Version", "unknown")
             result = {"status": "ok", "message": f"CONNECTED", "class": "status-ok", "version": version}
-        except docker.errors.DockerException:
-            result = {"status": "error", "message": "NOT CONNECTED", "class": "status-error", "version": None}
-        except Exception:
-            result = {"status": "error", "message": "NOT INSTALLED", "class": "status-error", "version": None}
+        except docker.errors.DockerException as e:
+            # Check if it's a permissions issue (user not in docker group)
+            error_msg = str(e).lower()
+            if "permission" in error_msg or "denied" in error_msg or "socket" in error_msg:
+                result = {"status": "error", "message": "NOT CONNECTED (check docker group membership)", "class": "status-error", "version": None}
+            else:
+                result = {"status": "error", "message": "NOT CONNECTED", "class": "status-error", "version": None}
+        except Exception as e:
+            # Check if docker CLI is available but service isn't running
+            import shutil
+            if shutil.which("docker"):
+                # Docker CLI exists, so likely daemon not running
+                result = {"status": "error", "message": "NOT CONNECTED (Docker daemon not running)", "class": "status-error", "version": None}
+            else:
+                result = {"status": "error", "message": "NOT INSTALLED", "class": "status-error", "version": None}
 
         Utilities._cache = result
         Utilities._cached_at = now

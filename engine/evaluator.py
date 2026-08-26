@@ -17,7 +17,8 @@ def compute_time_seconds(log):
     """Time between started_at and submitted_at"""
     start = datetime.fromisoformat(log.get("started_at", ""))
     end = datetime.fromisoformat(log.get("submitted_at", ""))
-    return (end - start).total_seconds()
+    diff = (end - start).total_seconds()
+    return max(0.0, diff)  # Never return negative time
 
 def compute_error_rate(log):
     """Percentage of commands with non-zero exit code"""

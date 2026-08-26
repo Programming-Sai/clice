@@ -57,9 +57,11 @@ class Config:
             "https://raw.githubusercontent.com/programming-sai/clice-challenges/registry/registry.hash"
         )
 
-        # Cache/logs directories
-        self.cache_dir = Path(os.getenv("CLICE_CACHE_DIR", str(Path.home() / ".clice" / "cache")))
-        self.logs_dir = Path(os.getenv("CLICE_LOGS_DIR", str(Path.cwd() / "assets")))
+        # Cache/logs directories - expand ~ in env values
+        cache_env = os.getenv("CLICE_CACHE_DIR", str(Path.home() / ".clice" / "cache"))
+        logs_env = os.getenv("CLICE_LOGS_DIR", str(Path.home() / ".clice" / "runs"))
+        self.cache_dir = Path(os.path.expanduser(cache_env))
+        self.logs_dir = Path(os.path.expanduser(logs_env))
 
         # Where user overrides live - a sibling of cache_dir, always under
         # ~/.clice regardless of CLICE_CACHE_DIR, so it's predictable.

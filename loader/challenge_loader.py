@@ -5,7 +5,9 @@ import io
 import tarfile
 import threading
 import time
+import uuid
 import requests
+from datetime import datetime, timezone
 
 from ui.services.config import Config
 
@@ -16,6 +18,32 @@ class ChallengeLoader:
         self.config = config or Config()
         # challenge_id (lowercased) -> raw checker script text
         self.check_scripts = {}
+        # Set by load_challenge(): the unique id for the current run.
+        self.run_id = None
+
+    def gc(self):
+        """Remove orphaned clice-managed containers - ones left behind by a
+        crash or a killed session. Labels (not names) are the lookup key,
+        so this finds orphans across every challenge at once. Stopped
+        containers are removed; running ones whose run is not active can't
+        be reliably distinguished from a live concurrent session, so only
+        stopped containers are reaped here."""
+        reaped = 0
+        try:
+            orphans = self.docker.containers.list(
+                all=True, filters={"label": "clice.managed=true"}
+            )
+        except Exception as e:
+            trace("gc_list_failed", error=repr(e))
+            return 0
+        for c in orphans:
+            if c.status != "running":
+                try:
+                    c.remove(force=True)
+                    reaped += 1
+                except Exception as e:
+                    trace("gc_remove_failed", container=c.name, error=repr(e))
+        return reaped
 
     def load_challenge(self, challenge_info):
         """Pull challenge image, start the challenge container. No volume:
@@ -30,13 +58,12 @@ class ChallengeLoader:
         # Cache the checker script now so verify() has it ready later.
         self._fetch_check_script(challenge_info)
 
-        container_name = f"clice-{challenge_info['id']}"
-        try:
-            existing = self.docker.containers.get(container_name)
-            existing.remove(force=True)
-            print(f"Removed existing container: {container_name}")
-        except docker.errors.NotFound:
-            pass
+        # Unique per-run id: two concurrent runs of the same challenge get
+        # distinct container names and never collide. Also threaded into
+        # labels (below) so gc() can find orphans of any run later.
+        self.run_id = uuid.uuid4().hex[:8]
+        code = challenge_info.get("code", challenge_info["id"])
+        container_name = f"clice-{code}-{self.run_id}"
 
         container = self.docker.containers.run(
             challenge_info["image"],
@@ -45,6 +72,12 @@ class ChallengeLoader:
             stdin_open=True,
             tty=True,
             name=container_name,
+            labels={
+                "clice.managed": "true",
+                "clice.challenge_id": challenge_info["id"],
+                "clice.run_id": self.run_id,
+                "clice.created_at": datetime.now(timezone.utc).isoformat(),
+            },
             mem_limit=self.config.challenge_mem_limit,
             nano_cpus=self.config.challenge_nano_cpus,
             network_disabled=not self.config.network_enabled,
@@ -242,7 +275,11 @@ class ChallengeLoader:
         if not self.config.auto_cleanup:
             return
         try:
-            container.stop()
+            # Try to stop, but ignore errors if already stopped/being stopped
+            try:
+                container.stop()
+            except Exception:
+                pass
             container.remove()
         except Exception:
             pass
