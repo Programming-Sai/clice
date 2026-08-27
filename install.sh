@@ -91,36 +91,126 @@ info "Detected: $OS/$ARCH -> $ASSET"
 # the prompt below would either hang forever or - as originally shipped -
 # silently skip itself every single time, defeating the whole point of
 # asking before installing anything.
+# docker_daemon_active: best-effort check for whether the Docker daemon
+# is actually running, independent of whether *this* user can talk to it.
+# Querying systemd unit state doesn't require docker-group membership,
+# unlike `docker info` - so this can tell "daemon is down" apart from
+# "daemon is fine, I just can't reach it" instead of guessing from one
+# combined signal.
+docker_daemon_active() {
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl is-active --quiet docker 2>/dev/null
+  else
+    # No systemd here - fall back to checking for the socket directly.
+    [ -S /var/run/docker.sock ]
+  fi
+}
+
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   info "Docker is installed and running."
-else
-  warn "Docker was not found (or isn't running)."
-  if [ "$OS" = "linux" ]; then
-    DO_INSTALL="no"
+elif command -v docker >/dev/null 2>&1; then
+  # Docker's CLI is present, so it's genuinely installed - it's just not
+  # reachable from here. Two independent things can cause that: the
+  # daemon isn't running, or this user isn't in the 'docker' group. An
+  # earlier version of this script guessed at a single combined cause;
+  # check both explicitly instead, and only fix/report on the ones that
+  # are actually wrong.
+  info "Docker is installed."
+
+  if docker_daemon_active; then
+    info "Docker daemon is running."
+  else
+    warn "Docker daemon is not running."
+    DO_START="no"
     if [ "$WITH_DOCKER" = "yes" ]; then
-      DO_INSTALL="yes"
+      DO_START="yes"
     elif [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
-      read -r -p "Install Docker now via the official get.docker.com script (uses sudo)? [y/N] " reply < /dev/tty
+      read -r -p "Start it now (sudo systemctl enable --now docker)? [y/N] " reply < /dev/tty
       case "$reply" in
-        [yY]*) DO_INSTALL="yes" ;;
+        [yY]*) DO_START="yes" ;;
       esac
     elif [ "$WITH_DOCKER" != "no" ]; then
       warn "No terminal available to ask interactively (and no --with-docker/--no-docker flag)."
-      warn "Skipping Docker install - re-run with --with-docker to install it automatically."
     fi
-
-    if [ "$DO_INSTALL" = "yes" ]; then
-      info "Installing Docker via the official get.docker.com script..."
-      curl -fsSL https://get.docker.com | sh
-      info "Adding $USER to the docker group (so you don't need sudo for docker commands)..."
-      sudo usermod -aG docker "$USER" || true
-      warn "Log out and back in (or run: newgrp docker) for that group change to take effect."
+    if [ "$DO_START" = "yes" ] && command -v systemctl >/dev/null 2>&1; then
+      sudo systemctl enable --now docker
+      info "Docker daemon started."
+    elif [ "$DO_START" = "yes" ]; then
+      warn "No systemd found here - start the Docker daemon manually for your init system."
     else
-      warn "Skipping Docker install. clice will not work until Docker is installed and running:"
-      warn "  https://docs.docker.com/engine/install/"
+      warn "Skipping. Start it manually with: sudo systemctl start docker"
     fi
+  fi
 
-  # ── Display server detection and fullscreen tool install ─────────
+  if [ "$OS" = "linux" ]; then
+    if ! getent group docker >/dev/null 2>&1; then
+      # The group genuinely doesn't exist on disk - not a stale-session
+      # issue, and not something usermod can fix on its own. This usually
+      # means the Docker install itself is incomplete.
+      warn "No 'docker' group exists on this system - the Docker install looks incomplete."
+      warn "Consider reinstalling Docker: https://docs.docker.com/engine/install/"
+    elif id -nG "$USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+      if ! docker info >/dev/null 2>&1; then
+        warn "You're already in the 'docker' group - this shell just predates that."
+        warn "Log out and back in (or run: newgrp docker), then run 'clice doctor' to confirm."
+      fi
+    else
+      DO_ADD="no"
+      if [ "$WITH_DOCKER" = "yes" ]; then
+        DO_ADD="yes"
+      elif [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+        read -r -p "Add $USER to the 'docker' group now (requires sudo)? [y/N] " reply < /dev/tty
+        case "$reply" in
+          [yY]*) DO_ADD="yes" ;;
+        esac
+      elif [ "$WITH_DOCKER" != "no" ]; then
+        warn "No terminal available to ask interactively (and no --with-docker/--no-docker flag)."
+      fi
+      if [ "$DO_ADD" = "yes" ]; then
+        sudo usermod -aG docker "$USER"
+        warn "Log out and back in (or run: newgrp docker) for that to take effect, then run 'clice doctor'."
+      else
+        warn "Skipping. Add yourself manually with: sudo usermod -aG docker \$USER"
+      fi
+    fi
+  fi
+elif [ "$OS" = "linux" ]; then
+  warn "Docker was not found."
+  DO_INSTALL="no"
+  if [ "$WITH_DOCKER" = "yes" ]; then
+    DO_INSTALL="yes"
+  elif [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+    read -r -p "Install Docker now via the official get.docker.com script (uses sudo)? [y/N] " reply < /dev/tty
+    case "$reply" in
+      [yY]*) DO_INSTALL="yes" ;;
+    esac
+  elif [ "$WITH_DOCKER" != "no" ]; then
+    warn "No terminal available to ask interactively (and no --with-docker/--no-docker flag)."
+    warn "Skipping Docker install - re-run with --with-docker to install it automatically."
+  fi
+
+  if [ "$DO_INSTALL" = "yes" ]; then
+    info "Installing Docker via the official get.docker.com script..."
+    curl -fsSL https://get.docker.com | sh
+    info "Starting the Docker service..."
+    sudo systemctl enable --now docker 2>/dev/null || true
+    info "Adding $USER to the docker group (so you don't need sudo for docker commands)..."
+    sudo usermod -aG docker "$USER" || true
+    warn "Log out and back in (or run: newgrp docker) for that group change to take effect."
+    warn "Once you have, run 'clice doctor' to confirm Docker is connected."
+  else
+    warn "Skipping Docker install. clice will not work until Docker is installed and running:"
+    warn "  https://docs.docker.com/engine/install/"
+  fi
+else
+  warn "clice needs Docker Desktop here - this script can't install a GUI app for you."
+  warn "  brew install --cask docker   (then launch it once from Applications)"
+fi
+
+# ── Display server detection and fullscreen tool install ─────────
+# Independent of the Docker branch above - applies on Linux regardless
+# of whether Docker was already working, just fixed, or still missing.
+if [ "$OS" = "linux" ]; then
   # Check which display server is in use (X11 vs Wayland)
   if [ -n "${WAYLAND_DISPLAY:-}" ]; then
     DISPLAY_SERVER="wayland"
@@ -139,7 +229,7 @@ else
       info "xdotool is installed (XWayland fallback)."
     else
       warn "No Wayland fullscreen tool found. Installing xdotool (XWayland fallback)..."
-      if [ "$WITH_DOCKER" = "yes" ] || [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+      if [ -t 1 ] && [ -r /dev/tty ]; then
         read -r -p "Install xdotool now via apt (requires sudo)? [y/N] " reply < /dev/tty
         case "$reply" in
           [yY]*)
@@ -163,7 +253,7 @@ else
       info "xdotool is installed (X11 fallback)."
     else
       warn "wmctrl or xdotool is required for fullscreen support on X11."
-      if [ "$WITH_DOCKER" = "yes" ] || [ "$WITH_DOCKER" != "no" ] && [ -t 1 ] && [ -r /dev/tty ]; then
+      if [ -t 1 ] && [ -r /dev/tty ]; then
         read -r -p "Install wmctrl now via apt (requires sudo)? If it fails, xdotool will be offered. [y/N] " reply < /dev/tty
         case "$reply" in
           [yY]*)
@@ -196,10 +286,6 @@ else
     fi
   else
     warn "Could not detect display server (X11/Wayland). Fullscreen support may not work."
-  fi
-  else
-    warn "clice needs Docker Desktop here - this script can't install a GUI app for you."
-    warn "  brew install --cask docker   (then launch it once from Applications)"
   fi
 fi
 
