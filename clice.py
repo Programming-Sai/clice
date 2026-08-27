@@ -20,6 +20,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import os 
 from pathlib import Path
 
 from ui.services.registry import RegistryService
@@ -431,8 +432,13 @@ def _fetch_and_run_script(url: str, script_args: list[str]) -> int:
         f.write(response.text)
         script_path = f.name
 
+    # Frozen (PyInstaller) builds poison LD_LIBRARY_PATH with their own
+    # bundled libs, which subprocesses inherit and system tools (curl)
+    # can crash on. Restore the pre-freeze value PyInstaller saved off.
+    env = {**os.environ, "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH_ORIG", "")}
+
     try:
-        result = subprocess.run(["bash", script_path, *script_args])
+        result = subprocess.run(["bash", script_path, *script_args], env=env)
         return result.returncode
     finally:
         Path(script_path).unlink(missing_ok=True)
