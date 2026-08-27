@@ -119,7 +119,6 @@ else
       warn "Skipping Docker install. clice will not work until Docker is installed and running:"
       warn "  https://docs.docker.com/engine/install/"
     fi
-  fi
 
   # ── Display server detection and fullscreen tool install ─────────
   # Check which display server is in use (X11 vs Wayland)
