@@ -30,7 +30,7 @@ jobs:
             asset_name: clice-linux-x86_64
           - os: ubuntu-22.04-arm # ARM64 Linux
             asset_name: clice-linux-arm64
-          - os: macos-13 # Intel
+          - os: macos-14 # Intel x86_64 (Sonoma)
             asset_name: clice-macos-x86_64
           - os: macos-latest # Apple Silicon
             asset_name: clice-macos-arm64
