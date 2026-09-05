@@ -69,10 +69,6 @@ esac
 case "$(uname -m)" in
   x86_64|amd64) ARCH="x86_64" ;;
   arm64|aarch64)
-    if [ "$OS" = "linux" ]; then
-      error "No prebuilt linux-arm64 binary yet - sorry. Open an issue if you need one."
-      exit 1
-    fi
     ARCH="arm64"
     ;;
   *) error "Unsupported architecture: $(uname -m)"; exit 1 ;;
