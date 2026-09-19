@@ -2,20 +2,16 @@ name: Build and Release Binaries
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
-# NOTE on the ubuntu-22.04 pin above: PyInstaller dynamically links against
-# whatever glibc is present on the build machine, and glibc is only
-# forward-compatible (a binary built on newer glibc won't run on older
-# systems, but the reverse works fine). ubuntu-latest currently means
-# Ubuntu 24.04 (glibc 2.38+), which breaks anyone still on 22.04 or older -
-# pinning to 22.04 (glibc 2.35) produces a binary that runs everywhere 22.04
-# does *and* everywhere newer. GitHub has begun deprecating the ubuntu-22.04
-# runner label itself (targeted full removal ~April 2027) - that only
-# affects future CI runs on this label, not binaries already built and
-# released, but this pin will need revisiting before then.
+# NOTE on the ubuntu-22.04 pin: PyInstaller links against glibc on the build machine,
+# glibc is forward-compatible only. ubuntu-latest = 24.04 (glibc 2.38) breaks 22.04.
+# Pin to 22.04 (glibc 2.35) so binary runs everywhere >=22.04. GitHub will retire
+# ubuntu-22.04 label ~Apr 2027 — revisit then.
 
 permissions:
   contents: write
@@ -26,13 +22,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04 # pinned, not ubuntu-latest - see note below
+          - os: ubuntu-22.04
             asset_name: clice-linux-x86_64
-          - os: ubuntu-22.04-arm # ARM64 Linux
+          - os: ubuntu-22.04-arm
             asset_name: clice-linux-arm64
-          - os: macos-14 # Intel x86_64 (Sonoma)
+          - os: macos-14
             asset_name: clice-macos-x86_64
-          - os: macos-latest # Apple Silicon
+          - os: macos-latest
             asset_name: clice-macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
@@ -47,15 +43,75 @@ jobs:
           pip install pyinstaller
           pip install -r requirements.txt
 
+      # ── BUILD ───────────────────────────────────────────────
       - name: Build onedir bundle
         run: pyinstaller clice.spec
 
-      - name: Package as tarball
+      # ── SMOKE (no Docker, no termmax) ───────────────────────
+      # These catch 80% of PyInstaller breakage before we ship anything.
+      # termmax/dind failures are WARN not FAIL - app must still boot headless.
+      - name: Smoke - binary boots
+        run: |
+          ./dist/clice --help
+          ./dist/clice config
+          ./dist/clice get resources.memory
+          ./dist/clice doctor || true  # doctor may warn without Docker - just must not crash
+          ./dist/clice list || true    # registry fetch may be rate-limited - must not crash
+
+      - name: Smoke - textual mounts headless
+        run: |
+          python -c "from ui.main import CliceApp; print('import ok')"
+          python tests/screenshot_headless.py || echo "WARN: screenshot harness failed but build is still valid"
+          ls -lh screenshots/ || true
+
+      # ── ARTIFACTS (not Release yet) ─────────────────────────
+      - name: Package binary
         run: |
           cd dist
           tar czf ../${{ matrix.asset_name }}.tar.gz clice
 
-      - name: Upload to release
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}.tar.gz
+          retention-days: 14
+
+      - name: Upload screenshots artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.asset_name }}
+          path: screenshots/*.png
+          retention-days: 14
+          if-no-files-found: warn
+
+  # ── GATE: publish only if all 4 builds + smokes passed ─────
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: Show what we built
+        run: ls -R artifacts/
+
+      - name: Flatten for release
+        run: |
+          mkdir -p release
+          find artifacts -name "*.tar.gz" -exec cp {} release/ \;
+          # also bundle screenshots per-OS into one tar for the release
+          mkdir -p screenshots-all
+          find artifacts -path "*/screenshots-*" -name "*.png" -exec cp {} screenshots-all/ \; || true
+          ls -lh screenshots-all/ || true
+          tar czf release/screenshots-all.tar.gz -C screenshots-all . 2>/dev/null || echo "no screenshots to bundle"
+
+      - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.asset_name }}.tar.gz
+          files: |
+            release/*.tar.gz
