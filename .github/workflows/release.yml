@@ -47,17 +47,17 @@ jobs:
       - name: Build onedir bundle
         run: pyinstaller clice.spec
 
-      # ── SMOKE (no Docker, no termmax) ───────────────────────
-      # These catch 80% of PyInstaller breakage before we ship anything.
       # termmax/dind failures are WARN not FAIL - app must still boot headless.
+      # ── SMOKE (no Docker, no termmax) ───────────────────────
+      # clice.spec uses COLLECT (onedir) so binary is dist/clice/clice, not dist/clice
       - name: Smoke - binary boots
         run: |
-          ./dist/clice --help
-          ./dist/clice config
-          ./dist/clice get resources.memory
-          ./dist/clice doctor || true  # doctor may warn without Docker - just must not crash
-          ./dist/clice list || true    # registry fetch may be rate-limited - must not crash
-
+          ls -lh dist/clice/
+          ./dist/clice/clice --help
+          ./dist/clice/clice config
+          ./dist/clice/clice get resources.memory
+          ./dist/clice/clice doctor || true
+          ./dist/clice/clice list || true
       - name: Smoke - textual mounts headless
         run: |
           python -c "from ui.main import CliceApp; print('import ok')"
