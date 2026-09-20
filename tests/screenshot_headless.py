@@ -1,53 +1,112 @@
 """Headless screenshot harness - works without DISPLAY, without Docker, without termmax.
-Run via: python tests/screenshot_headless.py
+Run via: PYTHONPATH=. python tests/screenshot_headless.py
 """
 import asyncio
 import inspect
+import sys
 from pathlib import Path
-import os
 
+# --- FIX 1: allow `python tests/screenshot_headless.py` to find `ui` ---
+# When run as `python tests/foo.py`, sys.path[0] is .../tests, not repo root.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import os
 os.environ["TEXTUAL"] = "headless"
-# termmax checks this internally - force it to no-op in headless
 os.environ["TERMMAX_DISABLED"] = "1"
 
+from textual.widgets import Static  # for polling placeholders
 from ui.main import CliceApp
 
 
-async def capture(screen_name: str, out_path: Path, size=(140, 40)):
-    """Capture one screen headlessly."""
+async def wait_for_home_ready(pilot, timeout=8.0):
+    """Wait until HomeScreen's [...] placeholders are replaced.
+    HomeScreen._do_refresh runs in a thread and replaces [...] with SYNCED/ERROR etc.
+    If we screenshot too early we get empty [...] state.
+    We poll for that text; if still there after timeout we screenshot anyway (better than empty failure).
+    """
+    start = asyncio.get_event_loop().time()
+    while asyncio.get_event_loop().time() - start < timeout:
+        await pilot.pause()
+        try:
+            # Any Static still showing [...] means refresh hasn't finished
+            placeholders = []
+            for w in pilot.app.query(Static):
+                try:
+                    # Static stores renderable in .renderable or ._renderable
+                    txt = ""
+                    if hasattr(w, "renderable") and w.renderable is not None:
+                        txt = str(w.renderable)
+                    elif hasattr(w, "_renderable") and w._renderable is not None:
+                        txt = str(w._renderable)
+                    else:
+                        # fallback: render the widget
+                        txt = str(w.render())
+                    if "[...]" in txt:
+                        placeholders.append(w)
+                except Exception:
+                    continue
+            if not placeholders:
+                # also give compositor a final frame
+                await asyncio.sleep(0.3)
+                return True
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    print(f"WARN: wait_for_home_ready timed out after {timeout}s - screenshotting anyway")
+    return False
+
+
+async def capture(screen_name: str, out_path: Path, size=(140, 42)):
     app = CliceApp()
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
-        # Home is already pushed by on_mount, others need explicit push
+        # Let initial mount + termmax no-op settle
+        await asyncio.sleep(0.5)
+
         if screen_name != "home":
             try:
-                # push_screen is sync in textual App, pilot.app variant is same
                 pilot.app.push_screen(screen_name)
                 await pilot.pause()
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.8)
             except Exception as e:
                 print(f"WARN: could not push {screen_name}: {e}")
 
+        # For home, wait for background thread to replace [...] 
+        if screen_name == "home":
+            await wait_for_home_ready(pilot, timeout=7)
+        else:
+            # browser/history/settings also do async loads (registry, history scans)
+            # give them a moment
+            await pilot.pause()
+            await asyncio.sleep(1.2)
+
+        # Final idle
+        await pilot.pause()
+        await asyncio.sleep(0.5)
+
         # --- robust save: textual 8.2.7 save_screenshot is SYNC, not async ---
-        # It saves SVG even if you name it .png - that's fine, GitHub will still preview SVG as image.
-        # We handle both sync and async, and fallback to export_screenshot.
         try:
-            target = out_path
-            # save_screenshot(filename=..., path=...) is the correct signature
-            # Passing full path as filename works, but split to be explicit:
             meth = pilot.app.save_screenshot
             if inspect.iscoroutinefunction(meth):
-                result = await meth(str(target))
+                result = await meth(str(out_path))
             else:
-                result = meth(str(target))
+                result = meth(str(out_path))
             print(f"Saved {screen_name} -> {result} (via save_screenshot)")
-            # textual writes SVG content even when filename ends .png - ensure file exists
-            if not Path(result).exists() and not target.exists():
-                raise FileNotFoundError(f"save_screenshot claimed {result} but file missing")
-            # If textual returned a different path than requested (e.g. auto dir), copy it
-            if Path(result) != target and Path(result).exists():
-                Path(result).replace(target)
-            return
+            # textual joins path internally; ensure requested file exists
+            result_path = Path(result)
+            if result_path != out_path and result_path.exists():
+                # move to expected name if textual auto-named differently
+                result_path.replace(out_path)
+                print(f"  moved {result_path} -> {out_path}")
+            elif not out_path.exists() and result_path.exists():
+                # already at right place
+                pass
+            if out_path.exists():
+                return
+            else:
+                raise FileNotFoundError(f"save_screenshot returned {result} but {out_path} missing")
         except Exception as e:
             print(f"save_screenshot failed for {screen_name}: {e} - trying export_screenshot")
 
@@ -58,7 +117,6 @@ async def capture(screen_name: str, out_path: Path, size=(140, 40)):
             return
         except Exception as e2:
             print(f"WARN: export_screenshot also failed for {screen_name}: {e2}")
-            # create placeholder so artifact upload doesn't warn "no files"
             try:
                 out_path.write_text(f"<svg><!-- placeholder for {screen_name} failed: {e2} --></svg>", encoding="utf-8")
             except Exception:
@@ -84,7 +142,10 @@ async def main():
     files = list(out_dir.glob("*"))
     print(f"All screenshots done: {files}")
     for f in files:
-        print(f"  {f.name}: {f.stat().st_size} bytes")
+        try:
+            print(f"  {f.name}: {f.stat().st_size} bytes")
+        except Exception:
+            print(f"  {f.name}: ? bytes")
     if not files:
         raise SystemExit("ERROR: no screenshots created")
 

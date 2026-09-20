@@ -61,13 +61,17 @@ jobs:
           ./dist/clice/clice list || true    # registry fetch may be rate-limited - must not crash
 
       - name: Smoke - textual mounts headless
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python -c "from ui.main import CliceApp; print('import ok')"
           python tests/screenshot_headless.py || echo "WARN: screenshot harness failed but build is still valid"
-          ls -lh screenshots/
-          cat screenshots/*.png 2>&1 | head -c 500 || true
+          ls -lh screenshots/ || echo "no screenshots dir yet"
           echo "--- screenshot sizes ---"
-          wc -c screenshots/* 2>&1 || true
+          wc -c screenshots/* 2>&1 || echo "no screenshots yet"
+          # show first 500 chars of one file to prove it's SVG not empty
+          head -c 500 screenshots/Home-Screen.png 2>&1 || true
+          echo ""
 
       # ── ARTIFACTS (not Release yet) ─────────────────────────
       - name: Package binary
