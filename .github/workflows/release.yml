@@ -47,22 +47,27 @@ jobs:
       - name: Build onedir bundle
         run: pyinstaller clice.spec
 
-      # termmax/dind failures are WARN not FAIL - app must still boot headless.
       # ── SMOKE (no Docker, no termmax) ───────────────────────
-      # clice.spec uses COLLECT (onedir) so binary is dist/clice/clice, not dist/clice
+      # clice.spec uses COLLECT (onedir) so the binary is dist/clice/clice, not dist/clice
+      # These catch 80% of PyInstaller breakage before we ship anything.
+      # termmax/dind failures are WARN not FAIL - app must still boot headless.
       - name: Smoke - binary boots
         run: |
           ls -lh dist/clice/
           ./dist/clice/clice --help
           ./dist/clice/clice config
           ./dist/clice/clice get resources.memory
-          ./dist/clice/clice doctor || true
-          ./dist/clice/clice list || true
+          ./dist/clice/clice doctor || true  # doctor may warn without Docker - just must not crash
+          ./dist/clice/clice list || true    # registry fetch may be rate-limited - must not crash
+
       - name: Smoke - textual mounts headless
         run: |
           python -c "from ui.main import CliceApp; print('import ok')"
           python tests/screenshot_headless.py || echo "WARN: screenshot harness failed but build is still valid"
-          ls -lh screenshots/ || true
+          ls -lh screenshots/
+          cat screenshots/*.png 2>&1 | head -c 500 || true
+          echo "--- screenshot sizes ---"
+          wc -c screenshots/* 2>&1 || true
 
       # ── ARTIFACTS (not Release yet) ─────────────────────────
       - name: Package binary
@@ -81,7 +86,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: screenshots-${{ matrix.asset_name }}
-          path: screenshots/*.png
+          path: screenshots/*
           retention-days: 14
           if-no-files-found: warn
 
