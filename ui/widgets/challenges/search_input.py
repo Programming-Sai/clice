@@ -4,7 +4,7 @@ from textual.widgets import Input
 
 class SearchInput(Input):
     def _on_key(self, event) -> None:
-        if event.key in ("up", "down", "alt+x"):
+        if event.key in ("up", "down", "ctrl+s"):
             event.prevent_default()
             event.stop()
             # bubble it up to the screen's on_key

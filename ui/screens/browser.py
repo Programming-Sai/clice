@@ -35,7 +35,7 @@ class BrowserScreen(Screen):
         Binding("down",   "cursor_down", "Navigate down", show=True),
         Binding("slash",  "search",      "Search",        show=True),
         Binding("escape", "app.pop_screen", "Back", show=True),
-        Binding("alt+x", "start_challenge", "Start", show=True),
+        Binding("ctrl+s", "start_challenge", "Start", show=True),
         Binding("r", "refresh", "Refresh", show=True),
     ]
 
@@ -326,7 +326,7 @@ class BrowserScreen(Screen):
             self.action_cursor_down()
             return
 
-        if event.key == "alt+x":
+        if event.key == "ctrl+s":
             event.prevent_default()
             event.stop()
             self.action_start_challenge()

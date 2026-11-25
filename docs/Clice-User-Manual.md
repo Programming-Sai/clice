@@ -185,7 +185,7 @@ The core experience — a real interactive shell inside a disposable Docker cont
 
 **Starting a session:**
 
-- From Browser: `Alt+X` on a challenge
+- From Browser: `Ctrl+S` on a challenge
 - From anywhere: `clice open hello-clice`
 
 **What happens:**

@@ -76,7 +76,7 @@ class CliceApp(App):
     """
     
     BINDINGS = [
-        ("n", "new_session", "NEW_SESSION"),
+        # ("n", "new_session", "NEW_SESSION"),
         ("x", "home",     "HOME"),
         ("b", "browser",     "BROWSER"),
         ("h", "history",     "HISTORY"),
@@ -214,8 +214,8 @@ class CliceApp(App):
         self.switch_screen("home")
         self.notify(f"Failed to start challenge: {error}", title="Error", severity="error", timeout=PERSISTENT_NOTIFICATION_TIMEOUT)
     
-    def action_new_session(self) -> None:
-        self.notify("🖥  NEW_SESSION — not yet implemented!", title="CLICE")
+    # def action_new_session(self) -> None:
+    #     self.notify("🖥  NEW_SESSION — not yet implemented!", title="CLICE")
     
     def action_browser(self) -> None:
         """Navigate to challenge browser"""

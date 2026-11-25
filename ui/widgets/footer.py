@@ -8,7 +8,7 @@ class Footer(Static):
 
     BINDING_SETS = {
         "home": [
-            ("N", "NEW_SESSION"),
+            # ("N", "NEW_SESSION"),
             ("B", "BROWSER"),
             ("H", "HISTORY"),
             ("S", "SETTINGS"),
@@ -18,7 +18,7 @@ class Footer(Static):
         "browser": [
             ("↑/↓", "NAVIGATE"),
             ("/", "SEARCH"),
-            ("Alt+X", "START"),
+            ("Ctrl+S", "START"),
             ("Esc", "BACK"),
             ("Q", "QUIT"),
         ],
