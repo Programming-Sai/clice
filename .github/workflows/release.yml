@@ -24,12 +24,21 @@ jobs:
         include:
           - os: ubuntu-22.04
             asset_name: clice-linux-x86_64
+            arch_match: "x86-64"
           - os: ubuntu-22.04-arm
             asset_name: clice-linux-arm64
-          - os: macos-14
+            arch_match: "aarch64"
+          # macos-14 was retired by GitHub on 2026-11-02 and it was Apple Silicon anyway,
+          # so this "x86_64" leg was never really Intel. macos-15-intel is the last
+          # x86_64 hosted runner (supported until ~Aug 2027 - revisit then).
+          - os: macos-15-intel
             asset_name: clice-macos-x86_64
-          - os: macos-latest
+            arch_match: "x86_64"
+          # Pinned instead of macos-latest (now macos-26) so the binary's minimum
+          # macOS version doesn't silently creep up whenever GitHub moves the alias.
+          - os: macos-15
             asset_name: clice-macos-arm64
+            arch_match: "arm64"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +55,11 @@ jobs:
       # ── BUILD ───────────────────────────────────────────────
       - name: Build onedir bundle
         run: pyinstaller clice.spec
+
+      - name: Verify binary architecture matches asset name
+        run: |
+          file dist/clice/clice
+          file dist/clice/clice | grep -E "${{ matrix.arch_match }}"
 
       # ── SMOKE (no Docker, no termmax) ───────────────────────
       # clice.spec uses COLLECT (onedir) so the binary is dist/clice/clice, not dist/clice
@@ -94,11 +108,16 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  # ── GATE: publish only if all 4 builds + smokes passed ─────
+  # ── RELEASE: publish whatever built successfully ─────────
+  # build uses fail-fast: false, so every OS runs to completion on its own. A failing
+  # (or retired/unavailable) runner must not block the other platforms, so this job
+  # runs even when some build legs failed. !cancelled() (not always()) means a manual
+  # cancel still stops the release. A leg that fails never uploads its tarball
+  # (steps after a failure are skipped), so only verified binaries get published.
   release:
     needs: build
     runs-on: ubuntu-22.04
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Download all binaries
         uses: actions/download-artifact@v4
@@ -108,6 +127,23 @@ jobs:
 
       - name: Show what we built
         run: ls -R artifacts/
+
+      - name: Require at least one binary, report missing platforms
+        run: |
+          found=$(find artifacts -name "clice-*.tar.gz" | wc -l)
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No platform built successfully - nothing to release"
+            exit 1
+          fi
+          missing=""
+          for a in clice-linux-x86_64 clice-linux-arm64 clice-macos-x86_64 clice-macos-arm64; do
+            find artifacts -name "$a.tar.gz" | grep -q . || missing="$missing $a"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::PARTIAL RELEASE - missing:$missing"
+            echo "### Partial release" >> "$GITHUB_STEP_SUMMARY"
+            echo "Missing builds:$missing" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Flatten for release
         run: |
